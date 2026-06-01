@@ -39,7 +39,7 @@ class RepeatNoteSetupModal extends Modal {
     this.result = initialValue ? { ...initialValue } : {
       ...settings.defaultRepeat,
       repeatDueAt: undefined,
-      hidden: false,
+      hidden: settings.hiddenFieldDefaultValue,
     };
     // Populate initial repeatDueAt.
     if (!this.result.repeatDueAt) {

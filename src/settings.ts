@@ -13,6 +13,7 @@ export interface RepeatPluginSettings {
   eveningReviewTime: string;
   defaultRepeat: Repeat;
   enqueueNonRepeatingNotes: boolean;
+  hiddenFieldDefaultValue: boolean;
   filterQuery: string;              // Current Dataview FROM expression
   savedFilters: SavedFilter[];      // Named filter presets
 }
@@ -30,6 +31,7 @@ export const DEFAULT_SETTINGS: RepeatPluginSettings = {
     repeatTimeOfDay: 'AM',
   },
   enqueueNonRepeatingNotes: false,
+  hiddenFieldDefaultValue: false,
   filterQuery: '',
   savedFilters: [],
 };

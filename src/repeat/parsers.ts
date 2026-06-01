@@ -264,15 +264,18 @@ export function parseRepetitionFromMarkdown(
 
 export function parseHiddenFieldFromMarkdown(
   markdown: string
-): boolean {
+): boolean | undefined {
   const frontmatterBounds = determineFrontmatterBounds(markdown);
   const frontmatter = frontmatterBounds?.length ?
     markdown.slice(...frontmatterBounds) : '';
   if (frontmatter) {
-    const { hidden: extractedHidden } = parseYaml(frontmatter);
+    const { hidden: extractedHidden } = parseYaml(frontmatter) || {};
+    if (extractedHidden === undefined || extractedHidden === null) {
+      return undefined;
+    }
     return parseYamlBoolean(extractedHidden);
   }
-  return false;
+  return undefined;
 }
 
 export function parseTime(twentyFourHourTime: string) {

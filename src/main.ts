@@ -214,7 +214,8 @@ export default class RepeatPlugin extends Plugin {
               } as any, this.settings);
               const newContent = updateRepetitionMetadata(content, serializeRepetition({
                 ...repeat,
-                hidden: parseHiddenFieldFromMarkdown(content),
+                hidden: parseHiddenFieldFromMarkdown(content)
+                  ?? this.settings.hiddenFieldDefaultValue,
                 repeatDueAt,
                 virtual: false,
               }));
@@ -225,6 +226,40 @@ export default class RepeatPlugin extends Plugin {
           return false;
         }
       });
+    });
+
+    this.addCommand({
+      id: 'repeat-spaced',
+      name: 'Repeat this note (spaced)',
+      checkCallback: (checking: boolean) => {
+        const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (markdownView && !!markdownView.file) {
+          if (!checking) {
+            const { editor, file } = markdownView;
+            const content = editor.getValue();
+            const repeat = {
+              repeatStrategy: 'SPACED' as Strategy,
+              repeatPeriod: 1,
+              repeatPeriodUnit: 'DAY' as PeriodUnit,
+              repeatTimeOfDay: 'AM' as TimeOfDay,
+            };
+            const repeatDueAt = incrementRepeatDueAt({
+              ...repeat,
+              repeatDueAt: undefined,
+            } as any, this.settings);
+            const newContent = updateRepetitionMetadata(content, serializeRepetition({
+              ...repeat,
+              hidden: parseHiddenFieldFromMarkdown(content)
+                ?? this.settings.hiddenFieldDefaultValue,
+              repeatDueAt,
+              virtual: false,
+            }));
+            this.app.vault.modify(file, newContent);
+          }
+          return true;
+        }
+        return false;
+      }
     });
 
     this.addCommand({
@@ -383,6 +418,16 @@ class RepeatPluginSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.enqueueNonRepeatingNotes)
           .onChange(async (value) => {
             this.plugin.settings.enqueueNonRepeatingNotes = value;
+            await this.plugin.saveSettings();
+          }));
+
+      new Setting(containerEl)
+        .setName('Hidden field default value')
+        .setDesc('Default value of the "Hidden" toggle when opening the "Repeat this note..." window for a note that is not yet repeating.')
+        .addToggle(component => component
+          .setValue(this.plugin.settings.hiddenFieldDefaultValue)
+          .onChange(async (value) => {
+            this.plugin.settings.hiddenFieldDefaultValue = value;
             await this.plugin.saveSettings();
           }));
 
