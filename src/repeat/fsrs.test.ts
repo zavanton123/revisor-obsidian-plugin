@@ -2,7 +2,7 @@ jest.mock('obsidian', () => {}, { virtual: true });
 import { DateTime } from 'luxon';
 import { Rating, State } from 'ts-fsrs';
 
-import { getRepeatChoices, SKIP_BUTTON_TEXT } from './choices';
+import { getRepeatChoices } from './choices';
 import {
   buildScheduler,
   cardToFsrsState,
@@ -15,9 +15,6 @@ import { serializeFsrsState, serializeRepetition } from './serializers';
 import { Repetition } from './repeatTypes';
 
 const mockSettings = {
-  morningReviewTime: '06:00',
-  eveningReviewTime: '18:00',
-  enqueueNonRepeatingNotes: false,
   fsrsRequestRetention: 0.9,
   fsrsMaximumInterval: 36500,
   fsrsEnableFuzz: false,
@@ -77,7 +74,6 @@ describe('serializeRepetition FSRS', () => {
     const repetition: Repetition = {
       repeatTimeOfDay: 'AM',
       repeatDueAt: DateTime.fromISO(referenceDueAt),
-      virtual: false,
       fsrs: {
         state: 'review',
         stability: 8.42,
@@ -102,7 +98,6 @@ describe('serializeRepetition FSRS', () => {
     const repetition: Repetition = {
       repeatTimeOfDay: 'AM',
       repeatDueAt: DateTime.fromISO(referenceDueAt),
-      virtual: false,
       fsrs: {
         state: 'learning',
         stability: 2.5,
@@ -127,7 +122,7 @@ describe('serializeRepetition FSRS', () => {
 });
 
 describe('getRepeatChoices FSRS', () => {
-  test('returns skip and four rating buttons for due fsrs notes', () => {
+  test('returns four rating buttons for due fsrs notes', () => {
     const originalNow = DateTime.now;
     DateTime.now = () => mockNow;
 
@@ -136,8 +131,7 @@ describe('getRepeatChoices FSRS', () => {
       repetition.repeatDueAt = mockNow.minus({ hours: 1 });
       const choices = getRepeatChoices(repetition, mockSettings as any);
 
-      expect(choices[0].text).toBe(SKIP_BUTTON_TEXT);
-      expect(choices).toHaveLength(5);
+      expect(choices).toHaveLength(4);
       expect(choices.some((choice) => choice.text.startsWith('Again'))).toBe(true);
       expect(choices.some((choice) => choice.text.startsWith('Good'))).toBe(true);
     } finally {

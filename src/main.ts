@@ -7,17 +7,16 @@ import {
   PluginSettingTab,
   Setting,
 } from 'obsidian';
+import { Rating } from 'ts-fsrs';
 
 import RepeatView, { REPEATING_NOTES_DUE_VIEW } from './repeat/obsidian/RepeatView';
-import RepeatNoteSetupModal from './repeat/obsidian/RepeatNoteSetupModal';
 import { RepeatPluginSettings, DEFAULT_SETTINGS } from './settings';
 import { updateRepetitionMetadata } from './frontmatter';
 import { getAPI } from 'obsidian-dataview';
 import { getNotesDue } from './repeat/queries';
-import { parseRepeat, parseRepetitionFromMarkdown } from './repeat/parsers';
-import { serializeRepeat, serializeRepetition } from './repeat/serializers';
+import { serializeRepetition } from './repeat/serializers';
 import { createInitialFsrsRepetition } from './repeat/fsrs';
-import { Repetition } from './repeat/repeatTypes';
+import { FSRS_RATING_LABELS } from './repeat/choices';
 
 const COUNT_DEBOUNCE_MS = 5 * 1000;
 
@@ -25,6 +24,7 @@ export default class RepeatPlugin extends Plugin {
   settings: RepeatPluginSettings;
   statusBarItem: HTMLElement | undefined;
   ribbonIcon: HTMLElement | undefined;
+  activeRepeatView: RepeatView | undefined;
 
   constructor(app: App, manifest: PluginManifest) {
     super(app, manifest);
@@ -33,6 +33,14 @@ export default class RepeatPlugin extends Plugin {
     this.manageStatusBarItem = this.manageStatusBarItem.bind(this);
     this.registerCommands = this.registerCommands.bind(this);
     this.makeRepeatRibbonIcon = this.makeRepeatRibbonIcon.bind(this);
+  }
+
+  setActiveRepeatView(view: RepeatView | undefined) {
+    this.activeRepeatView = view;
+  }
+
+  applyReviewRating(rating: Rating) {
+    this.activeRepeatView?.applyRating(rating);
   }
 
   async activateRepeatNotesDueView() {
@@ -74,7 +82,7 @@ export default class RepeatPlugin extends Plugin {
     if (this.settings.showDueCountInStatusBar && !this.statusBarItem) {
       this.statusBarItem = this.addStatusBarItem();
       this.statusBarItem.addClass('mod-clickable');
-      this.statusBarItem.setText('Repeat');
+      this.statusBarItem.setText('Revisor');
       this.statusBarItem.addEventListener('click', () => {
         this.activateRepeatNotesDueView();
       });
@@ -86,12 +94,9 @@ export default class RepeatPlugin extends Plugin {
       const dueNoteCount = getNotesDue(
         getAPI(this.app),
         this.settings.ignoreFolderPath,
-        undefined,
-        this.settings.enqueueNonRepeatingNotes,
-        this.settings.defaultRepeat)?.length;
+      )?.length;
       if (dueNoteCount != undefined) {
-        this.statusBarItem.setText(
-          `${dueNoteCount} repeat notes due`);
+        this.statusBarItem.setText(`${dueNoteCount} notes due`);
       }
     }
   }
@@ -133,7 +138,7 @@ export default class RepeatPlugin extends Plugin {
   makeRepeatRibbonIcon() {
     if (this.settings.showRibbonIcon) {
       this.ribbonIcon = this.addRibbonIcon(
-        'clock', 'Repeat due notes', () => {
+        'clock', 'Revisor: review due notes', () => {
           this.activateRepeatNotesDueView();
         }
       );
@@ -143,51 +148,7 @@ export default class RepeatPlugin extends Plugin {
   registerCommands() {
     this.addCommand({
       id: 'setup-repeat-note',
-      name: 'Repeat this note...',
-      checkCallback: (checking: boolean) => {
-        const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-        const onSubmit = (result: Repetition) => {
-          if (!markdownView || !markdownView.file) {
-            return;
-          }
-          const { editor, file } = markdownView;
-          const content = editor.getValue();
-          const newContent = updateRepetitionMetadata(
-            content, serializeRepetition(result));
-          this.app.vault.modify(file, newContent);
-        };
-        if (markdownView) {
-          if (!checking) {
-            let repetition;
-            if (markdownView) {
-              const { editor } = markdownView;
-              const content = editor.getValue();
-              repetition = parseRepetitionFromMarkdown(content);
-            }
-            new RepeatNoteSetupModal(
-              this.app,
-              onSubmit,
-              this.settings,
-              repetition,
-            ).open();
-          }
-          return true;
-        }
-        return false;
-      }
-    });
-
-    this.addCommand({
-      id: 'open-repeat-view',
-      name: 'Review due notes',
-      callback: () => {
-        this.activateRepeatNotesDueView();
-      },
-    });
-
-    this.addCommand({
-      id: 'repeat-fsrs',
-      name: 'Repeat this note (FSRS)',
+      name: 'Repeat this note',
       checkCallback: (checking: boolean) => {
         const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (markdownView && !!markdownView.file) {
@@ -208,24 +169,32 @@ export default class RepeatPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'repeat-never',
-      name: 'Never repeat this note',
-      checkCallback: (checking: boolean) => {
-        const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (markdownView && !!markdownView.file) {
+      id: 'open-repeat-view',
+      name: 'Review due notes',
+      callback: () => {
+        this.activateRepeatNotesDueView();
+      },
+    });
+
+    ([
+      [Rating.Again, 'again'],
+      [Rating.Hard, 'hard'],
+      [Rating.Good, 'good'],
+      [Rating.Easy, 'easy'],
+    ] as const).forEach(([rating, idSuffix]) => {
+      this.addCommand({
+        id: `mark-note-${idSuffix}`,
+        name: `Repeat: mark the note as ${FSRS_RATING_LABELS[rating]}`,
+        checkCallback: (checking: boolean) => {
+          if (!this.activeRepeatView) {
+            return false;
+          }
           if (!checking) {
-            const { editor, file } = markdownView;
-            const content = editor.getValue();
-            const newContent = updateRepetitionMetadata(
-              content,
-              serializeRepetition('NEVER'),
-            );
-            this.app.vault.modify(file, newContent);
+            this.applyReviewRating(rating);
           }
           return true;
-        }
-        return false;
-      }
+        },
+      });
     });
   }
 
@@ -236,8 +205,13 @@ export default class RepeatPlugin extends Plugin {
     this.registerCommands();
     this.registerView(
       REPEATING_NOTES_DUE_VIEW,
-      (leaf) => new RepeatView(leaf, this.settings, this.saveSettings.bind(this)),
-      );
+      (leaf) => new RepeatView(
+        leaf,
+        this.settings,
+        this.saveSettings.bind(this),
+        this,
+      ),
+    );
     this.addSettingTab(new RepeatPluginSettingTab(this.app, this));
   }
 
@@ -258,7 +232,7 @@ class RepeatPluginSettingTab extends PluginSettingTab {
     const { containerEl } = this;
 
     containerEl.empty();
-    containerEl.createEl('h2', { text: 'Repeat Plugin Settings' });
+    containerEl.createEl('h2', { text: 'Revisor Settings' });
 
     new Setting(containerEl)
       .setName('Show due count in status bar')
@@ -272,7 +246,7 @@ class RepeatPluginSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
         .setName('Show ribbon icon')
-        .setDesc('Whether to display the ribbon icon that opens the Repeat pane.')
+        .setDesc('Whether to display the ribbon icon that opens the Revisor pane.')
         .addToggle(component => component
           .setValue(this.plugin.settings.showRibbonIcon)
           .onChange(async (value) => {
@@ -290,60 +264,18 @@ class RepeatPluginSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }));
 
-    new Setting(containerEl)
-        .setName('Morning review time')
-        .setDesc('When morning and long-term notes become due in the morning.')
-        .addText((component) => {
-          component.inputEl.type = 'time';
-          component.inputEl.addClass('repeat-date_picker');
-          component.setValue(this.plugin.settings.morningReviewTime);
-          component.onChange(async (value) => {
-            const usedValue = value >= '12:00' ? '11:59' : value;
-            this.plugin.settings.morningReviewTime = usedValue;
-            component.setValue(usedValue);
-            await this.plugin.saveSettings();
-          });
-        });
-
-      new Setting(containerEl)
-        .setName('Evening review time')
-        .setDesc('When evening notes become due in the afternoon.')
-        .addText((component) => {
-          component.inputEl.type = 'time';
-          component.inputEl.addClass('repeat-date_picker');
-          component.setValue(this.plugin.settings.eveningReviewTime);
-          component.onChange(async (value) => {
-            const usedValue = value < '12:00' ? '12:00' : value;
-            this.plugin.settings.eveningReviewTime = usedValue;
-            component.setValue(usedValue);
-            await this.plugin.saveSettings();
-          });
-        });
-
       new Setting(containerEl)
         .setName('Default review time of day')
-        .setDesc('Default AM/PM preference for new FSRS notes.')
-        .addText((component) => {
-          return component
-            .setValue(serializeRepeat(this.plugin.settings.defaultRepeat))
-            .onChange(async (value) => {
-              const newRepeat = parseRepeat(value);
-              if (newRepeat) {
-                this.plugin.settings.defaultRepeat = newRepeat;
-                await this.plugin.saveSettings();
-              }
-            });
-        });
-
-      new Setting(containerEl)
-        .setName('Enqueue non-repeating notes')
-        .setDesc('Add notes without a repeat field to the end of the queue. Useful to quickly make new notes repeating during reviews.')
-        .addToggle(component => component
-          .setValue(this.plugin.settings.enqueueNonRepeatingNotes)
-          .onChange(async (value) => {
-            this.plugin.settings.enqueueNonRepeatingNotes = value;
+        .setDesc('Whether new FSRS notes are scheduled for morning or evening review.')
+        .addDropdown((dropdown) => {
+          dropdown.addOption('AM', 'Morning');
+          dropdown.addOption('PM', 'Evening');
+          dropdown.setValue(this.plugin.settings.defaultRepeat.repeatTimeOfDay);
+          dropdown.onChange(async (value: 'AM' | 'PM') => {
+            this.plugin.settings.defaultRepeat.repeatTimeOfDay = value;
             await this.plugin.saveSettings();
-          }));
+          });
+        });
 
       containerEl.createEl('h3', { text: 'FSRS Settings' });
 

@@ -7,6 +7,7 @@ import {
   TFile,
 } from 'obsidian';
 import { getAPI, DataviewApi } from 'obsidian-dataview';
+import { Rating } from 'ts-fsrs';
 
 import { determineFrontmatterBounds, updateRepetitionMetadata } from '../../frontmatter';
 import { getRepeatChoices } from '../choices';
@@ -21,19 +22,42 @@ const MODIFY_DEBOUNCE_MS = 1 * 1000;
 const QUERY_DEBOUNCE_MS = 500;
 export const REPEATING_NOTES_DUE_VIEW = 'repeating-notes-due-view';
 
+const RATING_BUTTON_CLASS: Record<Rating, string | undefined> = {
+  [Rating.Manual]: undefined,
+  [Rating.Again]: 'repeat-fsrs-again',
+  [Rating.Hard]: 'repeat-fsrs-hard',
+  [Rating.Good]: 'repeat-fsrs-good',
+  [Rating.Easy]: 'repeat-fsrs-easy',
+};
+
+const RATING_BUTTON_COLOR: Record<Rating, string | undefined> = {
+  [Rating.Manual]: undefined,
+  [Rating.Again]: '#c0392b',
+  [Rating.Hard]: '#e67e22',
+  [Rating.Good]: '#27ae60',
+  [Rating.Easy]: '#2980b9',
+};
+
+export interface RepeatViewPluginHost {
+  setActiveRepeatView(view: RepeatView | undefined): void;
+}
+
 class RepeatView extends ItemView {
   buttonsContainer: HTMLElement;
   component: Component;
+  currentChoices: RepeatChoice[] = [];
   currentDueFilePath: string | undefined;
+  currentFile: TFile | undefined;
   dv: DataviewApi | undefined;
   icon = 'clock';
   indexPromise: Promise<null> | undefined;
+  markdownContainer: HTMLElement | undefined;
   messageContainer: HTMLElement;
+  pluginHost: RepeatViewPluginHost;
   previewContainer: HTMLElement;
   root: Element;
   settings: RepeatPluginSettings;
 
-  // Filter UI elements
   filterContainer: HTMLElement;
   filterHeader: HTMLElement;
   filterContent: HTMLElement;
@@ -48,10 +72,18 @@ class RepeatView extends ItemView {
   saveSettings: () => Promise<void>;
   handleQueryChange: ReturnType<typeof debounce>;
   filterExpanded: boolean;
+  handleKeyDown: (event: KeyboardEvent) => void;
 
-  constructor(leaf: WorkspaceLeaf, settings: RepeatPluginSettings, saveSettings: () => Promise<void>) {
+  constructor(
+    leaf: WorkspaceLeaf,
+    settings: RepeatPluginSettings,
+    saveSettings: () => Promise<void>,
+    pluginHost: RepeatViewPluginHost,
+  ) {
     super(leaf);
     this.addRepeatButton = this.addRepeatButton.bind(this);
+    this.applyChoice = this.applyChoice.bind(this);
+    this.applyRating = this.applyRating.bind(this);
     this.disableExternalHandlers = this.disableExternalHandlers.bind(this);
     this.enableExternalHandlers = this.enableExternalHandlers.bind(this);
     this.handleExternalModifyOrDelete = debounce(
@@ -60,13 +92,14 @@ class RepeatView extends ItemView {
     this.handleExternalRename = debounce(
       this.handleExternalRename,
       MODIFY_DEBOUNCE_MS).bind(this);
+    this.handleKeyDown = this.handleKeyDownImpl.bind(this);
     this.promiseMetadataChangeOrTimeOut = (
       this.promiseMetadataChangeOrTimeOut.bind(this));
     this.setMessage = this.setMessage.bind(this);
     this.setPage = this.setPage.bind(this);
     this.resetView = this.resetView.bind(this);
+    this.unblurNote = this.unblurNote.bind(this);
 
-    // Filter-related bindings
     this.createFilterUI = this.createFilterUI.bind(this);
     this.refreshFilterUI = this.refreshFilterUI.bind(this);
     this.doHandleQueryChange = this.doHandleQueryChange.bind(this);
@@ -85,6 +118,7 @@ class RepeatView extends ItemView {
     this.dv = getAPI(this.app);
     this.settings = settings;
     this.saveSettings = saveSettings;
+    this.pluginHost = pluginHost;
     this.availableTags = [];
     this.displayedTagCount = 6;
 
@@ -98,7 +132,6 @@ class RepeatView extends ItemView {
         // @ts-ignore: event is added by DataView.
         this.app.metadataCache.on('dataview:index-ready', resolver));
       if (this.dv.index.initialized) {
-        // Not invoked on initial open if the index is loading.
         this.app.metadataCache.off('dataview:index-ready', resolver);
         resolve(null);
       }
@@ -113,13 +146,16 @@ class RepeatView extends ItemView {
   }
 
   getDisplayText() {
-    return 'Repeat';
+    return 'Revisor';
   }
 
   async onOpen() {
+    this.pluginHost.setActiveRepeatView(this);
+    this.containerEl.setAttr('tabindex', '-1');
+    this.registerDomEvent(document, 'keydown', this.handleKeyDown, { capture: true });
     if (!this.dv) {
       this.setMessage(
-        'Repeat Plugin requires DataView Plugin to work. ' +
+        'Revisor requires DataView Plugin to work. ' +
         'Make sure that the DataView Plugin is installed and enabled.'
       );
       return;
@@ -129,7 +165,57 @@ class RepeatView extends ItemView {
   }
 
   async onClose() {
+    this.pluginHost.setActiveRepeatView(undefined);
     this.disableExternalHandlers();
+  }
+
+  isActiveView(): boolean {
+    return this.app.workspace.activeLeaf?.view === this;
+  }
+
+  handleKeyDownImpl(event: KeyboardEvent) {
+    if (!this.isActiveView()) {
+      return;
+    }
+    if (event.key !== ' ' && event.code !== 'Space') {
+      return;
+    }
+    const target = event.target as HTMLElement;
+    if (target.isContentEditable
+      || target.tagName === 'INPUT'
+      || target.tagName === 'TEXTAREA'
+      || target.tagName === 'SELECT') {
+      return;
+    }
+    if (!this.markdownContainer?.classList.contains('repeat-markdown_blurred')) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.unblurNote();
+  }
+
+  unblurNote() {
+    this.markdownContainer?.classList.remove('repeat-markdown_blurred');
+  }
+
+  applyRating(rating: Rating) {
+    if (!this.currentFile) {
+      return;
+    }
+    const choice = this.currentChoices.find((c) => c.rating === rating);
+    if (choice) {
+      this.applyChoice(choice, this.currentFile);
+    }
+  }
+
+  async applyChoice(choice: RepeatChoice, file: TFile) {
+    this.resetView();
+    const markdown = await this.app.vault.read(file);
+    const newMarkdown = updateRepetitionMetadata(
+      markdown, serializeRepetition(choice.nextRepetition));
+    this.app.vault.modify(file, newMarkdown);
+    this.setPage(file.path);
   }
 
   enableExternalHandlers() {
@@ -166,8 +252,6 @@ class RepeatView extends ItemView {
   }
 
   async handleExternalModifyOrDelete(file: TFile) {
-    // Current note might be swapped if user edits it to be due later.
-    // However, this shouldn't happen when *other* notes are edited.
     if (file.path === this.currentDueFilePath) {
       await this.promiseMetadataChangeOrTimeOut();
       this.resetView();
@@ -176,8 +260,6 @@ class RepeatView extends ItemView {
   }
 
   async handleExternalRename(file: TFile, oldFilePath: string) {
-    // This only has to handle renames of this file because automatically
-    // updated embedded links emit their own modify event.
     if (oldFilePath === this.currentDueFilePath) {
       await this.promiseMetadataChangeOrTimeOut();
       this.resetView();
@@ -187,28 +269,21 @@ class RepeatView extends ItemView {
 
   async setPage(ignoreFilePath?: string | undefined) {
     await this.indexPromise;
-    // Reset the message container so that loading message is hidden.
     this.setMessage('');
     this.messageContainer.style.display = 'none';
 
-    // Refresh the filter UI with current tags
     this.refreshFilterUI();
 
     const page = getNextDueNote(
       this.dv,
       this.settings.ignoreFolderPath,
       ignoreFilePath,
-      this.settings.enqueueNonRepeatingNotes,
-      this.settings.defaultRepeat,
       this.settings.filterQuery || undefined);
     if (!page) {
-      // Check if there are notes due but filtered out
       const totalDue = getNotesDue(
         this.dv,
         this.settings.ignoreFolderPath,
         ignoreFilePath,
-        this.settings.enqueueNonRepeatingNotes,
-        this.settings.defaultRepeat
       )?.length || 0;
 
       if (totalDue > 0 && this.settings.filterQuery) {
@@ -216,6 +291,9 @@ class RepeatView extends ItemView {
       } else {
         this.setMessage('All done for now!');
       }
+      this.currentChoices = [];
+      this.currentFile = undefined;
+      this.markdownContainer = undefined;
       this.buttonsContainer.createEl('button', {
         text: 'Refresh',
       },
@@ -230,6 +308,7 @@ class RepeatView extends ItemView {
     const dueFilePath = (page?.file as any).path;
     this.currentDueFilePath = dueFilePath;
     const choices = getRepeatChoices(page.repetition as any, this.settings);
+    this.currentChoices = choices;
     const matchingMarkdowns = this.app.vault.getMarkdownFiles()
       .filter((file) => file?.path === dueFilePath);
     if (!matchingMarkdowns) {
@@ -239,44 +318,41 @@ class RepeatView extends ItemView {
       return;
     }
     const file = matchingMarkdowns[0];
+    this.currentFile = file;
 
-    // Render the repeat control buttons.
     choices.forEach(choice => this.addRepeatButton(choice, file));
 
-    // .markdown-embed adds undesirable borders while loading,
-    // so we only add the class when the note is about to be rendered.
     this.previewContainer.addClass('markdown-embed');
 
-    // Render the title and link that opens note being reviewed.
     renderTitleElement(
       this.previewContainer,
       file,
       this.app.vault);
 
-    // Add container for markdown content.
-    const markdownContainer = createEl('div', {
+    this.markdownContainer = createEl('div', {
       cls: 'markdown-embed-content repeat-markdown_blurred',
     });
     const onBlurredClick = (event: Event) => {
       event.preventDefault();
-      markdownContainer.removeClass('repeat-markdown_blurred');
+      this.unblurNote();
     };
-    markdownContainer.addEventListener(
+    this.markdownContainer.addEventListener(
       'click', onBlurredClick, { once: true });
 
-    this.previewContainer.appendChild(markdownContainer);
+    this.previewContainer.appendChild(this.markdownContainer);
 
-    // Render the note contents.
     const markdown = await this.app.vault.cachedRead(file);
     const delimitedFrontmatterBounds = determineFrontmatterBounds(markdown, true);
     await renderMarkdown(
       this.app,
       markdown.slice(
         delimitedFrontmatterBounds ? delimitedFrontmatterBounds[1] : 0),
-      markdownContainer,
+      this.markdownContainer,
       file.path,
       this.component,
       this.app.vault);
+
+    this.containerEl.focus();
   }
 
   resetView() {
@@ -285,18 +361,19 @@ class RepeatView extends ItemView {
     this.buttonsContainer && this.buttonsContainer.remove();
     this.previewContainer && this.previewContainer.remove();
     this.messageContainer = this.root.createEl('div', { cls: 'repeat-message' });
-    // Hide until there's a message to manage spacing.
     this.messageContainer.style.display = 'none';
     this.createFilterUI();
     this.buttonsContainer = this.root.createEl('div', { cls: 'repeat-buttons' });
     this.previewContainer = this.root.createEl('div', { cls: 'repeat-embedded_note' });
     this.currentDueFilePath = undefined;
+    this.currentFile = undefined;
+    this.currentChoices = [];
+    this.markdownContainer = undefined;
   }
 
   createFilterUI() {
     this.filterContainer = this.root.createEl('div', { cls: 'repeat-filter' });
 
-    // Drawer header (always visible)
     this.filterHeader = this.filterContainer.createEl('div', { cls: 'repeat-filter-header' });
     this.filterHeader.addEventListener('click', this.toggleFilterDrawer);
 
@@ -305,18 +382,15 @@ class RepeatView extends ItemView {
     });
     setIcon(this.filterToggleIcon, 'chevron-right');
 
-    // Filter count display (in header, always visible)
     this.filterCountEl = this.filterHeader.createEl('span', {
       cls: 'repeat-filter-count'
     });
 
-    // Collapsible content
     this.filterContent = this.filterContainer.createEl('div', {
       cls: 'repeat-filter-content'
     });
     this.filterContent.style.display = 'none';
 
-    // Row 1: Query input + Clear button
     const queryRow = this.filterContent.createEl('div', { cls: 'repeat-filter-row' });
 
     this.queryInput = queryRow.createEl('input', {
@@ -342,12 +416,10 @@ class RepeatView extends ItemView {
     });
     clearBtn.addEventListener('click', this.handleClearQuery);
 
-    // Row 2: Tag shortcuts
     this.tagShortcutsContainer = this.filterContent.createEl('div', {
       cls: 'repeat-filter-tags'
     });
 
-    // Row 3: Saved filters dropdown + Save/Delete buttons
     const savedFilterRow = this.filterContent.createEl('div', { cls: 'repeat-filter-row' });
 
     this.savedFilterDropdown = savedFilterRow.createEl('select', {
@@ -367,7 +439,6 @@ class RepeatView extends ItemView {
     });
     deleteBtn.addEventListener('click', this.handleDeleteSavedFilter);
 
-    // Error display (hidden by default)
     this.filterErrorEl = this.filterContent.createEl('div', {
       cls: 'repeat-filter-error'
     });
@@ -409,21 +480,16 @@ class RepeatView extends ItemView {
   }
 
   refreshFilterUI() {
-    // Get all tags from due notes (without filtering)
     this.availableTags = getTagsFromDueNotes(
       this.dv,
       this.settings.ignoreFolderPath,
       undefined,
-      this.settings.enqueueNonRepeatingNotes,
-      this.settings.defaultRepeat
     ) || [];
 
-    // Reset displayed count when refreshing (e.g., after reviewing a note)
     this.displayedTagCount = 6;
 
     this.renderTagShortcuts();
 
-    // Update saved filters dropdown
     this.savedFilterDropdown.empty();
     const defaultOption = this.savedFilterDropdown.createEl('option', {
       text: 'Load saved filter...',
@@ -431,12 +497,10 @@ class RepeatView extends ItemView {
     });
     defaultOption.disabled = true;
 
-    // Find if current query matches a saved filter
     const matchingFilterIndex = this.settings.savedFilters.findIndex(
       f => f.query === this.settings.filterQuery
     );
 
-    // Select the placeholder only if no filter matches
     if (matchingFilterIndex === -1) {
       defaultOption.selected = true;
     }
@@ -451,35 +515,27 @@ class RepeatView extends ItemView {
       }
     });
 
-    // Update filter count
     this.updateFilterCount();
   }
 
   updateFilterCount() {
     const filterQuery = this.settings.filterQuery;
 
-    // Get total due notes (unfiltered)
     const totalCount = getNotesDue(
       this.dv,
       this.settings.ignoreFolderPath,
       undefined,
-      this.settings.enqueueNonRepeatingNotes,
-      this.settings.defaultRepeat
     )?.length || 0;
 
     if (filterQuery) {
-      // Get filtered count
       try {
         const filteredCount = getNotesDue(
           this.dv,
           this.settings.ignoreFolderPath,
           undefined,
-          this.settings.enqueueNonRepeatingNotes,
-          this.settings.defaultRepeat,
           filterQuery
         )?.length || 0;
 
-        // Check if this matches a named filter
         const matchingFilter = this.settings.savedFilters.find(
           f => f.query === filterQuery
         );
@@ -507,7 +563,6 @@ class RepeatView extends ItemView {
       this.settings.filterQuery = newQuery;
       this.saveSettings();
       this.updateFilterCount();
-      // Re-render the current page with new filter
       this.buttonsContainer.empty();
       this.previewContainer.empty();
       this.previewContainer.removeClass('markdown-embed');
@@ -518,7 +573,6 @@ class RepeatView extends ItemView {
   handleTagClick(tag: string) {
     const currentQuery = this.queryInput.value.trim();
     if (currentQuery) {
-      // Append with OR
       this.queryInput.value = `${currentQuery} OR ${tag}`;
     } else {
       this.queryInput.value = tag;
@@ -531,7 +585,6 @@ class RepeatView extends ItemView {
     this.settings.filterQuery = '';
     await this.saveSettings();
     this.updateFilterCount();
-    // Re-render
     this.buttonsContainer.empty();
     this.previewContainer.empty();
     this.previewContainer.removeClass('markdown-embed');
@@ -541,7 +594,7 @@ class RepeatView extends ItemView {
   async handleSaveFilter() {
     const currentQuery = this.settings.filterQuery;
     if (!currentQuery) {
-      return; // Nothing to save
+      return;
     }
 
     const modal = new TextInputModal(
@@ -552,7 +605,6 @@ class RepeatView extends ItemView {
       async (name) => {
         if (!name) return;
 
-        // Check for duplicate names and update or add
         const existingIndex = this.settings.savedFilters.findIndex(f => f.name === name);
         if (existingIndex >= 0) {
           this.settings.savedFilters[existingIndex].query = currentQuery;
@@ -579,7 +631,6 @@ class RepeatView extends ItemView {
       this.settings.filterQuery = filter.query;
       await this.saveSettings();
       this.updateFilterCount();
-      // Re-render
       this.buttonsContainer.empty();
       this.previewContainer.empty();
       this.previewContainer.removeClass('markdown-embed');
@@ -595,7 +646,6 @@ class RepeatView extends ItemView {
 
     const filter = this.settings.savedFilters[filterIndex];
     if (filter) {
-      // Clear query if it matches the deleted filter
       const shouldClearQuery = this.settings.filterQuery === filter.query;
 
       this.settings.savedFilters.splice(filterIndex, 1);
@@ -608,7 +658,6 @@ class RepeatView extends ItemView {
       await this.saveSettings();
 
       if (shouldClearQuery) {
-        // Re-render with cleared filter
         this.buttonsContainer.empty();
         this.previewContainer.empty();
         this.previewContainer.removeClass('markdown-embed');
@@ -629,28 +678,22 @@ class RepeatView extends ItemView {
     file: TFile,
   ) {
     const buttonClasses = ['repeat-button'];
-    if (choice.text.startsWith('Again')) {
-      buttonClasses.push('repeat-fsrs-again');
-    } else if (choice.text.startsWith('Hard')) {
-      buttonClasses.push('repeat-fsrs-hard');
-    } else if (choice.text.startsWith('Good')) {
-      buttonClasses.push('repeat-fsrs-good');
-    } else if (choice.text.startsWith('Easy')) {
-      buttonClasses.push('repeat-fsrs-easy');
+    const ratingClass = RATING_BUTTON_CLASS[choice.rating];
+    const ratingColor = RATING_BUTTON_COLOR[choice.rating];
+    if (ratingClass) {
+      buttonClasses.push(ratingClass);
     }
     return this.buttonsContainer.createEl('button', {
         text: choice.text,
         cls: buttonClasses.join(' '),
       },
       (buttonElement) => {
-        buttonElement.onclick = async () => {
-          this.resetView();
-          const markdown = await this.app.vault.read(file);
-          const newMarkdown = updateRepetitionMetadata(
-            markdown, serializeRepetition(choice.nextRepetition));
-          this.app.vault.modify(file, newMarkdown);
-          this.setPage(file.path);
+        if (ratingColor) {
+          buttonElement.style.backgroundColor = ratingColor;
+          buttonElement.style.borderColor = ratingColor;
+          buttonElement.style.color = '#fff';
         }
+        buttonElement.onclick = () => this.applyChoice(choice, file);
       });
   }
 }

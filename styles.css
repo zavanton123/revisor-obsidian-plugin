@@ -17,6 +17,41 @@
   margin-left: 0;
 }
 
+.repeat-buttons > button.repeat-fsrs-again,
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-again {
+  background-color: #c0392b !important;
+  color: #fff !important;
+  border-color: #c0392b !important;
+}
+
+.repeat-buttons > button.repeat-fsrs-hard,
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-hard {
+  background-color: #e67e22 !important;
+  color: #fff !important;
+  border-color: #e67e22 !important;
+}
+
+.repeat-buttons > button.repeat-fsrs-good,
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-good {
+  background-color: #27ae60 !important;
+  color: #fff !important;
+  border-color: #27ae60 !important;
+}
+
+.repeat-buttons > button.repeat-fsrs-easy,
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-easy {
+  background-color: #2980b9 !important;
+  color: #fff !important;
+  border-color: #2980b9 !important;
+}
+
+.repeat-buttons > button.repeat-fsrs-again:hover,
+.repeat-buttons > button.repeat-fsrs-hard:hover,
+.repeat-buttons > button.repeat-fsrs-good:hover,
+.repeat-buttons > button.repeat-fsrs-easy:hover {
+  filter: brightness(1.1);
+}
+
 /* Make buttons legible on mobile. */
 @media (max-width: 450px) {
   .repeat-buttons > button {

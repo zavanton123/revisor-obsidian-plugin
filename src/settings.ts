@@ -9,10 +9,7 @@ export interface RepeatPluginSettings {
   showDueCountInStatusBar: boolean;
   showRibbonIcon: boolean;
   ignoreFolderPath: string;
-  morningReviewTime: string;
-  eveningReviewTime: string;
   defaultRepeat: Repeat;
-  enqueueNonRepeatingNotes: boolean;
   filterQuery: string;
   savedFilters: SavedFilter[];
   fsrsRequestRetention: number;
@@ -28,12 +25,9 @@ export const DEFAULT_SETTINGS: RepeatPluginSettings = {
   showDueCountInStatusBar: true,
   showRibbonIcon: true,
   ignoreFolderPath: '',
-  morningReviewTime: '06:00',
-  eveningReviewTime: '18:00',
   defaultRepeat: {
     repeatTimeOfDay: 'AM',
   },
-  enqueueNonRepeatingNotes: false,
   filterQuery: '',
   savedFilters: [],
   fsrsRequestRetention: 0.9,

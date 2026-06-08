@@ -53,21 +53,7 @@ export function serializeFsrsState(fsrs: FsrsCardState): string {
   return JSON.stringify(payload);
 }
 
-export function serializeRepetition(repetition: Repetition | 'DISMISS' | 'NEVER') {
-  if (repetition === 'NEVER') {
-    return {
-      repeat: 'never',
-      due_at: undefined,
-      ...Object.fromEntries(FSRS_FRONTMATTER_FIELDS.map((field) => [field, undefined])),
-    };
-  }
-  if (repetition === 'DISMISS') {
-    return {
-      repeat: undefined,
-      due_at: undefined,
-      ...Object.fromEntries(FSRS_FRONTMATTER_FIELDS.map((field) => [field, undefined])),
-    };
-  }
+export function serializeRepetition(repetition: Repetition) {
   const serialized: Record<string, string | undefined> = {
     repeat: serializeRepeat(repetition),
     due_at: repetition.repeatDueAt.toISO() || undefined,

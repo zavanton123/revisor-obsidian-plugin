@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon';
+import { Rating } from 'ts-fsrs';
 
 export type FsrsStateName = 'new' | 'learning' | 'review' | 'relearning';
 
@@ -21,11 +22,11 @@ export type Repeat = {
 
 export interface Repetition extends Repeat {
   repeatDueAt: DateTime,
-  virtual: boolean,
   fsrs?: FsrsCardState,
 }
 
 export type RepeatChoice = {
   text: string,
-  nextRepetition: Repetition | 'DISMISS' | 'NEVER',
+  rating: Rating,
+  nextRepetition: Repetition,
 }

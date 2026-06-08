@@ -147,12 +147,10 @@ export function formRepetition(
   parsedRepeat: Repeat,
   repeatDueAt: string | undefined,
   referenceDateTime?: DateTime | undefined,
-  virtual?: boolean | undefined,
   fsrsFrontmatter?: Record<string, unknown> | null,
 ): Repetition {
   return {
     ...parsedRepeat,
-    virtual: virtual || false,
     repeatDueAt: parseRepeatDueAt(
       repeatDueAt,
       referenceDateTime || DateTime.now(),
@@ -175,7 +173,6 @@ export function parseRepetitionFields(
     parsedRepeat,
     repeatDueAt,
     referenceDateTime,
-    false,
     fsrsFrontmatter,
   );
 }

@@ -10,7 +10,6 @@ describe('serializeRepetition round trip', () => {
   const fsrsRepetition: Repetition = {
     repeatTimeOfDay: 'AM',
     repeatDueAt: referenceRepeatDueAt,
-    virtual: false,
     fsrs: {
       state: 'review',
       stability: 8.42,

@@ -34,7 +34,6 @@ describe('parseRepetitionFields', () => {
     expect(repetition).toEqual({
       repeatTimeOfDay: 'AM',
       repeatDueAt: DateTime.fromISO(referenceRepeatDueAt),
-      virtual: false,
       fsrs: undefined,
     });
   });
