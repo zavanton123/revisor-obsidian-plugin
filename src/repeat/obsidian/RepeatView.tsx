@@ -356,15 +356,13 @@ class RepeatView extends ItemView {
 
     choices.forEach(choice => this.addRepeatButton(choice, file));
 
-    this.previewContainer.addClass('markdown-embed');
-
     renderTitleElement(
       this.previewContainer,
       file,
       this.app.vault);
 
     this.markdownContainer = createEl('div', {
-      cls: 'markdown-embed-content repeat-markdown_blurred',
+      cls: 'repeat-note-content repeat-markdown_blurred',
     });
     const onBlurredClick = (event: Event) => {
       event.preventDefault();
@@ -598,7 +596,6 @@ class RepeatView extends ItemView {
       this.updateFilterCount();
       this.buttonsContainer.empty();
       this.previewContainer.empty();
-      this.previewContainer.removeClass('markdown-embed');
       this.setPage();
     }
   }
@@ -619,9 +616,8 @@ class RepeatView extends ItemView {
     await this.saveSettings();
     this.updateFilterCount();
     this.buttonsContainer.empty();
-    this.previewContainer.empty();
-    this.previewContainer.removeClass('markdown-embed');
-    this.setPage();
+      this.previewContainer.empty();
+      this.setPage();
   }
 
   async handleSaveFilter() {
@@ -666,7 +662,6 @@ class RepeatView extends ItemView {
       this.updateFilterCount();
       this.buttonsContainer.empty();
       this.previewContainer.empty();
-      this.previewContainer.removeClass('markdown-embed');
       this.setPage();
     }
   }
@@ -692,9 +687,8 @@ class RepeatView extends ItemView {
 
       if (shouldClearQuery) {
         this.buttonsContainer.empty();
-        this.previewContainer.empty();
-        this.previewContainer.removeClass('markdown-embed');
-        this.setPage();
+      this.previewContainer.empty();
+      this.setPage();
       } else {
         this.refreshFilterUI();
       }

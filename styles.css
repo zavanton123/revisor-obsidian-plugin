@@ -106,6 +106,19 @@
   max-width: var(--file-line-width);
   margin-left: auto;
   margin-right: auto;
+  border: none;
+  border-left: none;
+}
+
+.repeat-note-content {
+  padding: 0;
+  border: none;
+  border-left: none;
+}
+
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-embedded_note .markdown-embed-title {
+  border-left: none;
+  padding-left: 0;
 }
 
 .repeat-markdown_embed_title {
