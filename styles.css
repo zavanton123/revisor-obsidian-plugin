@@ -3,13 +3,41 @@
   margin-top: 24px;
 }
 
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .view-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+}
+
+.repeat-view-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.repeat-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 .repeat-buttons {
+  flex-shrink: 0;
   text-align: center;
-  margin-bottom: 24px;
+  padding: 12px 16px;
+  background-color: var(--background-primary);
+  border-top: 1px solid var(--background-modifier-border);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .repeat-buttons > button {
-  margin-top: 16px;
+  margin-top: 0;
   margin-left: 16px;
 }
 
@@ -54,14 +82,27 @@
 
 /* Make buttons legible on mobile. */
 @media (max-width: 450px) {
+  .repeat-buttons {
+    padding: 12px;
+  }
+
   .repeat-buttons > button {
     width: 100%;
     margin-left: 0;
+    margin-top: 8px;
+  }
+
+  .repeat-buttons > button:first-child {
+    margin-top: 0;
+  }
+
+  .repeat-filter {
+    padding: 8px 16px;
   }
 }
 
 .repeat-embedded_note {
-  padding: 15px 30px;
+  padding: 15px 30px 24px;
   max-width: var(--file-line-width);
   margin-left: auto;
   margin-right: auto;
@@ -104,11 +145,16 @@
 
 /* Filter UI */
 .repeat-filter {
+  flex-shrink: 0;
   padding: 8px 30px;
   max-width: var(--file-line-width);
+  width: 100%;
   margin-left: auto;
   margin-right: auto;
+  background-color: var(--background-primary);
   border-bottom: 1px solid var(--background-modifier-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  z-index: 2;
 }
 
 .repeat-filter-header {

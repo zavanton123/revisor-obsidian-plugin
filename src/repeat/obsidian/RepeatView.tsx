@@ -72,6 +72,8 @@ class RepeatView extends ItemView {
   messageContainer: HTMLElement;
   pluginHost: RepeatViewPluginHost;
   previewContainer: HTMLElement;
+  layoutContainer: HTMLElement;
+  scrollContainer: HTMLElement;
   root: Element;
   settings: RepeatPluginSettings;
 
@@ -388,15 +390,14 @@ class RepeatView extends ItemView {
   }
 
   resetView() {
-    this.messageContainer && this.messageContainer.remove();
-    this.filterContainer && this.filterContainer.remove();
-    this.buttonsContainer && this.buttonsContainer.remove();
-    this.previewContainer && this.previewContainer.remove();
-    this.messageContainer = this.root.createEl('div', { cls: 'repeat-message' });
-    this.messageContainer.style.display = 'none';
+    this.layoutContainer?.remove();
+    this.layoutContainer = this.root.createEl('div', { cls: 'repeat-view-layout' });
     this.createFilterUI();
-    this.buttonsContainer = this.root.createEl('div', { cls: 'repeat-buttons' });
-    this.previewContainer = this.root.createEl('div', { cls: 'repeat-embedded_note' });
+    this.scrollContainer = this.layoutContainer.createEl('div', { cls: 'repeat-scroll' });
+    this.messageContainer = this.scrollContainer.createEl('div', { cls: 'repeat-message' });
+    this.messageContainer.style.display = 'none';
+    this.previewContainer = this.scrollContainer.createEl('div', { cls: 'repeat-embedded_note' });
+    this.buttonsContainer = this.layoutContainer.createEl('div', { cls: 'repeat-buttons' });
     this.currentDueFilePath = undefined;
     this.currentFile = undefined;
     this.currentChoices = [];
@@ -404,7 +405,7 @@ class RepeatView extends ItemView {
   }
 
   createFilterUI() {
-    this.filterContainer = this.root.createEl('div', { cls: 'repeat-filter' });
+    this.filterContainer = this.layoutContainer.createEl('div', { cls: 'repeat-filter' });
 
     this.filterHeader = this.filterContainer.createEl('div', { cls: 'repeat-filter-header' });
     this.filterHeader.addEventListener('click', this.toggleFilterDrawer);
