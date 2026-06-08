@@ -22,7 +22,6 @@ const mockSettings = {
   fsrsLearningSteps: '1m, 10m',
   fsrsRelearningSteps: '10m',
   fsrsWeights: null,
-  defaultRepeat: { repeatTimeOfDay: 'AM' },
 };
 
 const referenceDueAt = '2024-06-01T06:00:00.000-05:00';
@@ -32,14 +31,6 @@ describe('parseRepetition FSRS', () => {
   test('parses note with due_at', () => {
     const repetition = parseRepetition({ due_at: referenceDueAt });
     expect(repetition?.repeatTimeOfDay).toBe('AM');
-  });
-
-  test('parses evening review time', () => {
-    const repetition = parseRepetition({
-      due_at: referenceDueAt,
-      review_time_of_day: 'PM',
-    });
-    expect(repetition?.repeatTimeOfDay).toBe('PM');
   });
 
   test('parses nested fsrs frontmatter block', () => {
@@ -88,7 +79,7 @@ describe('serializeRepetition FSRS', () => {
     };
     const serialized = serializeRepetition(repetition);
     expect(serialized.repeat).toBeUndefined();
-    expect(serialized.review_time_of_day).toBe('AM');
+    expect(serialized.review_time_of_day).toBeUndefined();
     expect(JSON.parse(String(serialized.fsrs))).toMatchObject({
       state: 'review',
       stability: 8.42,
@@ -113,7 +104,6 @@ describe('serializeRepetition FSRS', () => {
     const serialized = serializeRepetition(repetition);
     const parsed = parseRepetition({
       due_at: serialized.due_at,
-      review_time_of_day: serialized.review_time_of_day,
       fsrs: serialized.fsrs,
     });
     expect(parsed?.repeatTimeOfDay).toBe('AM');

@@ -5,11 +5,10 @@ import { determineFrontmatterBounds } from '../frontmatter';
 
 import {
   Repetition,
-  TimeOfDay,
   FsrsCardState,
   FsrsStateName,
 } from './repeatTypes';
-import { DEFAULT_SETTINGS } from '../settings';
+import { DEFAULT_REPEAT } from '../settings';
 
 const FSRS_STATE_NAMES: FsrsStateName[] = [
   'new', 'learning', 'review', 'relearning',
@@ -17,44 +16,6 @@ const FSRS_STATE_NAMES: FsrsStateName[] = [
 
 export function isFsrsRepeat(repeat: string): boolean {
   return /^fsrs(\b|\s|$)/i.test(repeat.trim());
-}
-
-function parseRepeatTimeOfDayFromLegacyRepeat(repeat: string): TimeOfDay | undefined {
-  const processedRepeat = repeat.toLowerCase().trim();
-  if (!isFsrsRepeat(processedRepeat)) {
-    return undefined;
-  }
-  const remainder = processedRepeat.replace(/^fsrs\s*/, '');
-  if (remainder === 'in the evening' || remainder === 'pm') {
-    return 'PM';
-  }
-  if (remainder === 'in the morning' || remainder === 'am') {
-    return 'AM';
-  }
-  return 'AM';
-}
-
-export function parseReviewTimeOfDay(
-  frontmatter: Record<string, unknown>,
-): TimeOfDay {
-  const reviewTime = frontmatter.review_time_of_day;
-  if (typeof reviewTime === 'string') {
-    const normalized = reviewTime.trim().toUpperCase();
-    if (normalized === 'PM' || normalized === 'EVENING') {
-      return 'PM';
-    }
-    if (normalized === 'AM' || normalized === 'MORNING') {
-      return 'AM';
-    }
-  }
-  const legacyRepeat = frontmatter.repeat;
-  if (typeof legacyRepeat === 'string') {
-    const parsed = parseRepeatTimeOfDayFromLegacyRepeat(legacyRepeat);
-    if (parsed) {
-      return parsed;
-    }
-  }
-  return DEFAULT_SETTINGS.defaultRepeat.repeatTimeOfDay;
 }
 
 export function isRepeatDisabled(repeatFieldValue: string): boolean {
@@ -190,7 +151,7 @@ export function parseRepetition(
   }
   const reference = referenceDateTime || DateTime.now();
   return {
-    repeatTimeOfDay: parseReviewTimeOfDay(frontmatter),
+    repeatTimeOfDay: DEFAULT_REPEAT.repeatTimeOfDay,
     repeatDueAt: parseRepeatDueAt(
       frontmatter.due_at ? String(frontmatter.due_at) : undefined,
       reference,

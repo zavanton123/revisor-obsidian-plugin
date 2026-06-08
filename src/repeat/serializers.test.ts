@@ -26,16 +26,14 @@ describe('serializeRepetition round trip', () => {
     const serialized = serializeRepetition(fsrsRepetition);
     const roundTripped = parseRepetition({
       due_at: serialized.due_at,
-      review_time_of_day: serialized.review_time_of_day,
       fsrs: serialized.fsrs,
     });
     expect(roundTripped).toEqual(fsrsRepetition);
   });
 
-  test('serializes evening review time', () => {
-    const evening = { ...fsrsRepetition, repeatTimeOfDay: 'PM' as const };
-    const serialized = serializeRepetition(evening);
-    expect(serialized.review_time_of_day).toBe('PM');
+  test('does not serialize review_time_of_day or repeat', () => {
+    const serialized = serializeRepetition(fsrsRepetition);
+    expect(serialized.review_time_of_day).toBeUndefined();
     expect(serialized.repeat).toBeUndefined();
   });
 });

@@ -264,19 +264,6 @@ class RepeatPluginSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }));
 
-      new Setting(containerEl)
-        .setName('Default review time of day')
-        .setDesc('Whether new FSRS notes are scheduled for morning or evening review.')
-        .addDropdown((dropdown) => {
-          dropdown.addOption('AM', 'Morning');
-          dropdown.addOption('PM', 'Evening');
-          dropdown.setValue(this.plugin.settings.defaultRepeat.repeatTimeOfDay);
-          dropdown.onChange(async (value: 'AM' | 'PM') => {
-            this.plugin.settings.defaultRepeat.repeatTimeOfDay = value;
-            await this.plugin.saveSettings();
-          });
-        });
-
       containerEl.createEl('h3', { text: 'FSRS Settings' });
 
       new Setting(containerEl)

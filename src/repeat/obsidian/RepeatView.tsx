@@ -244,8 +244,10 @@ class RepeatView extends ItemView {
     const markdown = await this.app.vault.read(file);
     const newMarkdown = updateRepetitionMetadata(
       markdown, serializeRepetition(choice.nextRepetition));
-    this.app.vault.modify(file, newMarkdown);
-    this.setPage(file.path);
+    this.currentDueFilePath = file.path;
+    await this.app.vault.modify(file, newMarkdown);
+    await this.promiseMetadataChangeOrTimeOut();
+    this.setPage();
   }
 
   enableExternalHandlers() {
@@ -297,23 +299,20 @@ class RepeatView extends ItemView {
     }
   }
 
-  async setPage(ignoreFilePath?: string | undefined) {
+  async setPage() {
     await this.indexPromise;
     this.setMessage('');
     this.messageContainer.style.display = 'none';
 
-    this.refreshFilterUI();
-
     const page = getNextDueNote(
       this.dv,
       this.settings.ignoreFolderPath,
-      ignoreFilePath,
+      undefined,
       this.settings.filterQuery || undefined);
     if (!page) {
       const totalDue = getNotesDue(
         this.dv,
         this.settings.ignoreFolderPath,
-        ignoreFilePath,
       )?.length || 0;
 
       if (totalDue > 0 && this.settings.filterQuery) {
@@ -324,6 +323,7 @@ class RepeatView extends ItemView {
       this.currentChoices = [];
       this.currentFile = undefined;
       this.markdownContainer = undefined;
+      this.refreshFilterUI();
       this.buttonsContainer.createEl('button', {
         text: 'Refresh',
       },
@@ -335,6 +335,8 @@ class RepeatView extends ItemView {
       });
       return;
     }
+
+    this.refreshFilterUI();
     const dueFilePath = (page?.file as any).path;
     this.currentDueFilePath = dueFilePath;
     const choices = getRepeatChoices(page.repetition as any, this.settings);

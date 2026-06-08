@@ -11,12 +11,9 @@ import { DateTime } from 'luxon';
 
 import { RepeatPluginSettings } from '../settings';
 import { parseTime } from './parsers';
-import { FsrsCardState, Repetition, TimeOfDay } from './repeatTypes';
+import { FsrsCardState, Repetition } from './repeatTypes';
 
-const REVIEW_TIME_OF_DAY: Record<TimeOfDay, string> = {
-  AM: '06:00',
-  PM: '18:00',
-};
+const MORNING_REVIEW_TIME = '06:00';
 
 export function parseLearningSteps(steps: string): Steps {
   return steps.split(',').map((step) => step.trim()).filter(Boolean) as Steps;
@@ -99,13 +96,12 @@ export function repetitionToFsrsCard(repetition: Repetition, now: Date): Card {
 
 export function snapDueAtToReviewTime(
   dueAt: DateTime,
-  repetition: Repetition,
   now: DateTime,
 ): DateTime {
   if (dueAt.minus({ days: 7 }) < now) {
     return dueAt;
   }
-  const reviewTime = parseTime(REVIEW_TIME_OF_DAY[repetition.repeatTimeOfDay]);
+  const reviewTime = parseTime(MORNING_REVIEW_TIME);
   return dueAt.set({
     hour: reviewTime.hour,
     minute: reviewTime.minute,
@@ -122,7 +118,6 @@ export function fsrsCardToRepetition(
 ): Repetition {
   const repeatDueAt = snapDueAtToReviewTime(
     DateTime.fromJSDate(card.due),
-    repetition,
     now,
   );
   return {
@@ -138,7 +133,7 @@ export function createInitialFsrsRepetition(
   const now = DateTime.now();
   const card = createEmptyCard(now.toJSDate());
   return {
-    repeatTimeOfDay: settings.defaultRepeat.repeatTimeOfDay,
+    repeatTimeOfDay: 'AM',
     repeatDueAt: now,
     fsrs: cardToFsrsState(card),
   };

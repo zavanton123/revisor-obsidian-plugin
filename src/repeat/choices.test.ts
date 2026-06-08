@@ -12,7 +12,6 @@ const mockPluginSettings = {
   fsrsLearningSteps: '1m, 10m',
   fsrsRelearningSteps: '10m',
   fsrsWeights: null,
-  defaultRepeat: { repeatTimeOfDay: 'AM' },
 };
 
 const mockNow = DateTime.fromObject({ year: 2024, month: 6, day: 15, hour: 10 });

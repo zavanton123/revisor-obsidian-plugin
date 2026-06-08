@@ -4,7 +4,6 @@ import {
   isRevisorNote,
   isFsrsRepeat,
   parseRepetition,
-  parseReviewTimeOfDay,
 } from './parsers';
 
 const referenceRepeatDueAt = '2022-03-04T06:00:00.000-05:00';
@@ -39,18 +38,6 @@ describe('isRevisorNote', () => {
   });
 });
 
-describe('parseReviewTimeOfDay', () => {
-  test('reads review_time_of_day field', () => {
-    expect(parseReviewTimeOfDay({ review_time_of_day: 'PM' })).toBe('PM');
-    expect(parseReviewTimeOfDay({ review_time_of_day: 'AM' })).toBe('AM');
-  });
-
-  test('reads legacy repeat field', () => {
-    expect(parseReviewTimeOfDay({ repeat: 'fsrs in the evening' })).toBe('PM');
-    expect(parseReviewTimeOfDay({ repeat: 'fsrs' })).toBe('AM');
-  });
-});
-
 describe('parseRepetition', () => {
   test('parses revisor note from due_at', () => {
     const repetition = parseRepetition({ due_at: referenceRepeatDueAt });
@@ -69,14 +56,13 @@ describe('parseRepetition', () => {
   test('parses fsrs frontmatter block', () => {
     const repetition = parseRepetition({
       due_at: referenceRepeatDueAt,
-      review_time_of_day: 'PM',
       fsrs: {
         state: 'review',
         stability: 8.42,
         reps: 5,
       },
     });
-    expect(repetition?.repeatTimeOfDay).toBe('PM');
+    expect(repetition?.repeatTimeOfDay).toBe('AM');
     expect(repetition?.fsrs).toMatchObject({
       state: 'review',
       stability: 8.42,

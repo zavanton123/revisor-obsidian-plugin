@@ -12,6 +12,7 @@ export const FSRS_FRONTMATTER_FIELDS = [
   'fsrs_last_review',
   'hidden',
   'repeat',
+  'review_time_of_day',
 ];
 
 function roundNumber(value: number, decimals: number): number {
@@ -51,7 +52,7 @@ export function serializeRepetition(repetition: Repetition) {
   const serialized: Record<string, string | undefined> = {
     repeat: undefined,
     due_at: repetition.repeatDueAt.toISO() || undefined,
-    review_time_of_day: repetition.repeatTimeOfDay,
+    review_time_of_day: undefined,
     hidden: undefined,
   };
   if (repetition.fsrs) {
@@ -60,7 +61,7 @@ export function serializeRepetition(repetition: Repetition) {
     serialized.fsrs = undefined;
   }
   FSRS_FRONTMATTER_FIELDS.forEach((field) => {
-    if (field !== 'fsrs' && field !== 'hidden' && field !== 'repeat') {
+    if (field !== 'fsrs' && field !== 'hidden' && field !== 'repeat' && field !== 'review_time_of_day') {
       serialized[field] = undefined;
     }
   });

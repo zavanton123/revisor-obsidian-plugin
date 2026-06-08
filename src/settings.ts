@@ -9,7 +9,6 @@ export interface RepeatPluginSettings {
   showDueCountInStatusBar: boolean;
   showRibbonIcon: boolean;
   ignoreFolderPath: string;
-  defaultRepeat: Repeat;
   filterQuery: string;
   savedFilters: SavedFilter[];
   fsrsRequestRetention: number;
@@ -25,9 +24,6 @@ export const DEFAULT_SETTINGS: RepeatPluginSettings = {
   showDueCountInStatusBar: true,
   showRibbonIcon: true,
   ignoreFolderPath: '',
-  defaultRepeat: {
-    repeatTimeOfDay: 'AM',
-  },
   filterQuery: '',
   savedFilters: [],
   fsrsRequestRetention: 0.9,
@@ -37,4 +33,8 @@ export const DEFAULT_SETTINGS: RepeatPluginSettings = {
   fsrsLearningSteps: '1m, 10m',
   fsrsRelearningSteps: '10m',
   fsrsWeights: null,
+};
+
+export const DEFAULT_REPEAT: Repeat = {
+  repeatTimeOfDay: 'AM',
 };
