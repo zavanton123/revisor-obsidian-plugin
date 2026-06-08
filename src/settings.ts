@@ -16,6 +16,14 @@ export interface RepeatPluginSettings {
   hiddenFieldDefaultValue: boolean;
   filterQuery: string;              // Current Dataview FROM expression
   savedFilters: SavedFilter[];      // Named filter presets
+  fsrsEnabled: boolean;
+  fsrsRequestRetention: number;
+  fsrsMaximumInterval: number;
+  fsrsEnableFuzz: boolean;
+  fsrsEnableShortTerm: boolean;
+  fsrsLearningSteps: string;
+  fsrsRelearningSteps: string;
+  fsrsWeights: number[] | null;
 }
 
 export const DEFAULT_SETTINGS: RepeatPluginSettings = {
@@ -34,4 +42,12 @@ export const DEFAULT_SETTINGS: RepeatPluginSettings = {
   hiddenFieldDefaultValue: false,
   filterQuery: '',
   savedFilters: [],
+  fsrsEnabled: true,
+  fsrsRequestRetention: 0.9,
+  fsrsMaximumInterval: 36500,
+  fsrsEnableFuzz: true,
+  fsrsEnableShortTerm: true,
+  fsrsLearningSteps: '1m, 10m',
+  fsrsRelearningSteps: '10m',
+  fsrsWeights: null,
 };

@@ -17,6 +17,7 @@ import { getNotesDue } from './repeat/queries';
 import { parseHiddenFieldFromMarkdown, parseRepeat, parseRepetitionFromMarkdown } from './repeat/parsers';
 import { serializeRepeat, serializeRepetition } from './repeat/serializers';
 import { incrementRepeatDueAt } from './repeat/choices';
+import { createInitialFsrsRepetition } from './repeat/fsrs';
 import { PeriodUnit, Repetition, Strategy, TimeOfDay } from './repeat/repeatTypes';
 
 const COUNT_DEBOUNCE_MS = 5 * 1000;
@@ -263,19 +264,23 @@ export default class RepeatPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'repeat-never',
-      name: 'Never repeat this note',
+      id: 'repeat-fsrs',
+      name: 'Repeat this note (FSRS)',
       checkCallback: (checking: boolean) => {
         const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (markdownView && !!markdownView.file) {
           if (!checking) {
             const { editor, file } = markdownView;
             const content = editor.getValue();
-            const newContent = updateRepetitionMetadata(content, {
-              repeat: 'never',
-              due_at: undefined,
-              hidden: undefined,
-            });
+            const repetition = createInitialFsrsRepetition(
+              this.settings,
+              parseHiddenFieldFromMarkdown(content)
+                ?? this.settings.hiddenFieldDefaultValue,
+            );
+            const newContent = updateRepetitionMetadata(
+              content,
+              serializeRepetition(repetition),
+            );
             this.app.vault.modify(file, newContent);
           }
           return true;
@@ -293,11 +298,10 @@ export default class RepeatPlugin extends Plugin {
           if (!checking) {
             const { editor, file } = markdownView;
             const content = editor.getValue();
-            const newContent = updateRepetitionMetadata(content, {
-              repeat: 'never',
-              due_at: undefined,
-              hidden: undefined,
-            });
+            const newContent = updateRepetitionMetadata(
+              content,
+              serializeRepetition('NEVER'),
+            );
             this.app.vault.modify(file, newContent);
           }
           return true;
@@ -428,6 +432,83 @@ class RepeatPluginSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.hiddenFieldDefaultValue)
           .onChange(async (value) => {
             this.plugin.settings.hiddenFieldDefaultValue = value;
+            await this.plugin.saveSettings();
+          }));
+
+      containerEl.createEl('h3', { text: 'FSRS Settings' });
+
+      new Setting(containerEl)
+        .setName('Enable FSRS scheduling')
+        .setDesc('Show FSRS as a repeat type in setup and enable FSRS review buttons.')
+        .addToggle(component => component
+          .setValue(this.plugin.settings.fsrsEnabled)
+          .onChange(async (value) => {
+            this.plugin.settings.fsrsEnabled = value;
+            await this.plugin.saveSettings();
+          }));
+
+      new Setting(containerEl)
+        .setName('Desired retention')
+        .setDesc('Target recall probability at the next review (0.7–0.95). Default: 0.9')
+        .addSlider(component => component
+          .setLimits(0.7, 0.95, 0.01)
+          .setValue(this.plugin.settings.fsrsRequestRetention)
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            this.plugin.settings.fsrsRequestRetention = value;
+            await this.plugin.saveSettings();
+          }));
+
+      new Setting(containerEl)
+        .setName('Maximum interval (days)')
+        .setDesc('Upper bound for FSRS review intervals.')
+        .addText(component => component
+          .setValue(String(this.plugin.settings.fsrsMaximumInterval))
+          .onChange(async (value) => {
+            const parsed = parseInt(value, 10);
+            if (parsed > 0) {
+              this.plugin.settings.fsrsMaximumInterval = parsed;
+              await this.plugin.saveSettings();
+            }
+          }));
+
+      new Setting(containerEl)
+        .setName('Learning steps')
+        .setDesc('Comma-separated durations for new cards, e.g. "1m, 10m".')
+        .addText(component => component
+          .setValue(this.plugin.settings.fsrsLearningSteps)
+          .onChange(async (value) => {
+            this.plugin.settings.fsrsLearningSteps = value;
+            await this.plugin.saveSettings();
+          }));
+
+      new Setting(containerEl)
+        .setName('Relearning steps')
+        .setDesc('Comma-separated durations after a lapse, e.g. "10m".')
+        .addText(component => component
+          .setValue(this.plugin.settings.fsrsRelearningSteps)
+          .onChange(async (value) => {
+            this.plugin.settings.fsrsRelearningSteps = value;
+            await this.plugin.saveSettings();
+          }));
+
+      new Setting(containerEl)
+        .setName('Enable interval fuzz')
+        .setDesc('Add small random variation to long FSRS intervals.')
+        .addToggle(component => component
+          .setValue(this.plugin.settings.fsrsEnableFuzz)
+          .onChange(async (value) => {
+            this.plugin.settings.fsrsEnableFuzz = value;
+            await this.plugin.saveSettings();
+          }));
+
+      new Setting(containerEl)
+        .setName('Enable short-term scheduling')
+        .setDesc('Allow sub-day FSRS intervals alongside learning steps.')
+        .addToggle(component => component
+          .setValue(this.plugin.settings.fsrsEnableShortTerm)
+          .onChange(async (value) => {
+            this.plugin.settings.fsrsEnableShortTerm = value;
             await this.plugin.saveSettings();
           }));
 

@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon';
 import { App, Modal, Setting } from 'obsidian';
 import { incrementRepeatDueAt } from '../choices';
+import { createInitialFsrsRepetition } from '../fsrs';
 import { Repetition, Weekday } from '../repeatTypes';
 import { summarizeDueAtWithPrefix } from '../utils';
 import { RepeatPluginSettings } from '../../settings';
@@ -53,19 +54,28 @@ class RepeatNoteSetupModal extends Modal {
   updateResult(key: string, value: any) {
     this.result[key] = value;
 
-    // Handle UI visibility based on strategy/unit changes
     if (key === 'repeatStrategy' || key === 'repeatPeriodUnit') {
       this.updateVisibility();
     }
 
-    // Recalculate repeatDueAt and update picker's value.
-    this.result.repeatDueAt = incrementRepeatDueAt({
-      ...this.result,
-      // Always recompute relative to now.
-      repeatDueAt: undefined,
-    }, this.settings);
-    this.result.summary = summarizeDueAtWithPrefix(this.result.repeatDueAt);
-    // Ensure UI consistency.
+    if (this.result.repeatStrategy === 'FSRS') {
+      const initial = createInitialFsrsRepetition(
+        this.settings,
+        this.result.hidden ?? this.settings.hiddenFieldDefaultValue,
+      );
+      this.result = {
+        ...initial,
+        hidden: this.result.hidden ?? initial.hidden,
+        summary: summarizeDueAtWithPrefix(initial.repeatDueAt),
+      };
+    } else {
+      this.result.repeatDueAt = incrementRepeatDueAt({
+        ...this.result,
+        repeatDueAt: undefined,
+      }, this.settings);
+      this.result.summary = summarizeDueAtWithPrefix(this.result.repeatDueAt);
+    }
+
     if (this.datetimePickerEl) {
       this.datetimePickerEl.value = formatDateTimeForPicker(
         this.result.repeatDueAt);
@@ -75,12 +85,13 @@ class RepeatNoteSetupModal extends Modal {
 
   updateVisibility() {
     const isWeekdays = this.result.repeatPeriodUnit === 'WEEKDAYS';
+    const isFsrs = this.result.repeatStrategy === 'FSRS';
 
     if (this.weekdayContainerEl) {
-      this.weekdayContainerEl.style.display = isWeekdays ? 'block' : 'none';
+      this.weekdayContainerEl.style.display = (isWeekdays && !isFsrs) ? 'block' : 'none';
     }
     if (this.frequencyContainerEl) {
-      this.frequencyContainerEl.style.display = isWeekdays ? 'none' : 'block';
+      this.frequencyContainerEl.style.display = (isWeekdays || isFsrs) ? 'none' : 'block';
     }
 
     // Update weekday toggles to reflect current state
@@ -113,25 +124,34 @@ class RepeatNoteSetupModal extends Modal {
       .addDropdown((dropdown) => {
         dropdown.addOption('PERIODIC', 'Periodic');
         dropdown.addOption('SPACED', 'Spaced');
+        if (this.settings.fsrsEnabled) {
+          dropdown.addOption('FSRS', 'FSRS');
+        }
         dropdown.addOption('WEEKDAYS', 'Weekdays');
 
-        // Determine current strategy - if periodUnit is WEEKDAYS, show as WEEKDAYS strategy
-        const currentStrategy = this.result.repeatPeriodUnit === 'WEEKDAYS' ? 'WEEKDAYS' : this.result.repeatStrategy;
+        let currentStrategy = this.result.repeatPeriodUnit === 'WEEKDAYS'
+          ? 'WEEKDAYS'
+          : this.result.repeatStrategy;
         dropdown.setValue(currentStrategy);
 
         dropdown.onChange((value) =>	{
           if (value === 'WEEKDAYS') {
-            this.result.repeatStrategy = 'PERIODIC'; // Weekdays are always periodic under the hood
+            this.result.repeatStrategy = 'PERIODIC';
             this.result.repeatPeriodUnit = 'WEEKDAYS';
             this.result.repeatPeriod = 1;
             if (!this.result.repeatWeekdays || this.result.repeatWeekdays.length === 0) {
               this.result.repeatWeekdays = ['monday'];
             }
+          } else if (value === 'FSRS') {
+            this.result.repeatStrategy = 'FSRS';
+            this.result.repeatPeriodUnit = 'DAY';
+            this.result.repeatPeriod = 1;
+            delete this.result.repeatWeekdays;
           } else {
             this.result.repeatStrategy = value;
-            this.result.repeatPeriodUnit = 'DAY'; // Reset to default
+            this.result.repeatPeriodUnit = 'DAY';
             this.result.repeatPeriod = 1;
-            delete this.result.repeatWeekdays; // Remove weekdays when not using weekday strategy
+            delete this.result.repeatWeekdays;
           }
           this.updateResult('repeatStrategy', this.result.repeatStrategy);
         });
@@ -298,11 +318,18 @@ class RepeatNoteSetupModal extends Modal {
           .setButtonText('Set Up Repetition')
           .setCta()
           .onClick(() => {
-            // Remove local summary field that's not needed outside the component.
             const final = { ...this.result };
             delete final.summary;
+            if (final.repeatStrategy === 'FSRS') {
+              const initial = createInitialFsrsRepetition(
+                this.settings,
+                final.hidden ?? this.settings.hiddenFieldDefaultValue,
+              );
+              final.repeatDueAt = final.repeatDueAt || initial.repeatDueAt;
+              final.fsrs = final.fsrs || initial.fsrs;
+            }
             this.close();
-            this.onSubmit(this.result);
+            this.onSubmit(final);
           }));
 
     // Set initial visibility based on current settings

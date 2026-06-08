@@ -631,8 +631,19 @@ class RepeatView extends ItemView {
     choice: RepeatChoice,
     file: TFile,
   ) {
+    const buttonClasses = ['repeat-button'];
+    if (choice.text.startsWith('Again')) {
+      buttonClasses.push('repeat-fsrs-again');
+    } else if (choice.text.startsWith('Hard')) {
+      buttonClasses.push('repeat-fsrs-hard');
+    } else if (choice.text.startsWith('Good')) {
+      buttonClasses.push('repeat-fsrs-good');
+    } else if (choice.text.startsWith('Easy')) {
+      buttonClasses.push('repeat-fsrs-easy');
+    }
     return this.buttonsContainer.createEl('button', {
         text: choice.text,
+        cls: buttonClasses.join(' '),
       },
       (buttonElement) => {
         buttonElement.onclick = async () => {

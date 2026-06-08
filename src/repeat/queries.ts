@@ -20,7 +20,8 @@ export function getNotesDue(
   // If filterQuery provided, pass it to dv.pages() as a FROM expression
   return dv?.pages(filterQuery || undefined)
     .mutate((page: any) => {
-      const { repeat, due_at, hidden } = page.file.frontmatter || {};
+      const frontmatter = page.file.frontmatter || {};
+      const { repeat, due_at, hidden } = frontmatter;
       if (isRepeatDisabled(repeat)) {
         page.repetition = undefined;
         return page;
@@ -33,6 +34,7 @@ export function getNotesDue(
             undefined,
             page.file.ctime,
             true,
+            frontmatter,
           );
           return page;
         } else {
@@ -44,7 +46,9 @@ export function getNotesDue(
           repeat,
           due_at,
           hidden,
-          page.file.ctime);
+          page.file.ctime,
+          frontmatter,
+        );
         return page;
       }
     })
