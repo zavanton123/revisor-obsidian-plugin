@@ -1,4 +1,4 @@
-import { Repeat, Repetition, FsrsCardState } from './repeatTypes';
+import { Repetition, FsrsCardState } from './repeatTypes';
 
 export const FSRS_FRONTMATTER_FIELDS = [
   'fsrs',
@@ -11,18 +11,12 @@ export const FSRS_FRONTMATTER_FIELDS = [
   'fsrs_lapses',
   'fsrs_last_review',
   'hidden',
+  'repeat',
 ];
 
 function roundNumber(value: number, decimals: number): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
-}
-
-export function serializeRepeat({ repeatTimeOfDay }: Repeat): string {
-  return [
-    'fsrs',
-    ...(repeatTimeOfDay === 'AM' ? [] : ['in the evening']),
-  ].join(' ');
 }
 
 export function serializeFsrsState(fsrs: FsrsCardState): string {
@@ -55,8 +49,9 @@ export function serializeFsrsState(fsrs: FsrsCardState): string {
 
 export function serializeRepetition(repetition: Repetition) {
   const serialized: Record<string, string | undefined> = {
-    repeat: serializeRepeat(repetition),
+    repeat: undefined,
     due_at: repetition.repeatDueAt.toISO() || undefined,
+    review_time_of_day: repetition.repeatTimeOfDay,
     hidden: undefined,
   };
   if (repetition.fsrs) {
@@ -65,7 +60,7 @@ export function serializeRepetition(repetition: Repetition) {
     serialized.fsrs = undefined;
   }
   FSRS_FRONTMATTER_FIELDS.forEach((field) => {
-    if (field !== 'fsrs' && field !== 'hidden') {
+    if (field !== 'fsrs' && field !== 'hidden' && field !== 'repeat') {
       serialized[field] = undefined;
     }
   });

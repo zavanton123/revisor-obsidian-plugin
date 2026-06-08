@@ -4,7 +4,6 @@ import { parseYaml } from 'obsidian';
 import { determineFrontmatterBounds } from '../frontmatter';
 
 import {
-  Repeat,
   Repetition,
   TimeOfDay,
   FsrsCardState,
@@ -20,25 +19,42 @@ export function isFsrsRepeat(repeat: string): boolean {
   return /^fsrs(\b|\s|$)/i.test(repeat.trim());
 }
 
-function parseRepeatTimeOfDay(timeOfDaySuffix: string): TimeOfDay {
-  const processedTimeOfDaySuffix = timeOfDaySuffix.trim();
-  if (processedTimeOfDaySuffix === 'in the evening' || processedTimeOfDaySuffix === 'pm') {
-    return 'PM';
-  }
-  return 'AM';
-}
-
-export function parseRepeat(repeat: string): Repeat | undefined {
+function parseRepeatTimeOfDayFromLegacyRepeat(repeat: string): TimeOfDay | undefined {
   const processedRepeat = repeat.toLowerCase().trim();
   if (!isFsrsRepeat(processedRepeat)) {
     return undefined;
   }
   const remainder = processedRepeat.replace(/^fsrs\s*/, '');
-  return {
-    repeatTimeOfDay: remainder
-      ? parseRepeatTimeOfDay(remainder)
-      : DEFAULT_SETTINGS.defaultRepeat.repeatTimeOfDay,
-  };
+  if (remainder === 'in the evening' || remainder === 'pm') {
+    return 'PM';
+  }
+  if (remainder === 'in the morning' || remainder === 'am') {
+    return 'AM';
+  }
+  return 'AM';
+}
+
+export function parseReviewTimeOfDay(
+  frontmatter: Record<string, unknown>,
+): TimeOfDay {
+  const reviewTime = frontmatter.review_time_of_day;
+  if (typeof reviewTime === 'string') {
+    const normalized = reviewTime.trim().toUpperCase();
+    if (normalized === 'PM' || normalized === 'EVENING') {
+      return 'PM';
+    }
+    if (normalized === 'AM' || normalized === 'MORNING') {
+      return 'AM';
+    }
+  }
+  const legacyRepeat = frontmatter.repeat;
+  if (typeof legacyRepeat === 'string') {
+    const parsed = parseRepeatTimeOfDayFromLegacyRepeat(legacyRepeat);
+    if (parsed) {
+      return parsed;
+    }
+  }
+  return DEFAULT_SETTINGS.defaultRepeat.repeatTimeOfDay;
 }
 
 export function isRepeatDisabled(repeatFieldValue: string): boolean {
@@ -46,12 +62,34 @@ export function isRepeatDisabled(repeatFieldValue: string): boolean {
   return booleanRegex.test(repeatFieldValue);
 }
 
+export function isRevisorNote(frontmatter: Record<string, unknown>): boolean {
+  const repeat = frontmatter.repeat;
+  if (typeof repeat === 'string') {
+    if (isRepeatDisabled(repeat)) {
+      return false;
+    }
+    if (repeat.trim() && !isFsrsRepeat(repeat)) {
+      return false;
+    }
+  }
+  if (frontmatter.fsrs !== undefined) {
+    return true;
+  }
+  if (frontmatter.due_at) {
+    return true;
+  }
+  if (typeof repeat === 'string' && isFsrsRepeat(repeat)) {
+    return true;
+  }
+  return false;
+}
+
 export function parseRepeatDueAt(
   repeatDueAt: string | undefined,
   referenceDateTime: DateTime,
 ) {
   if (repeatDueAt) {
-    const parsedDueAtMaybe = DateTime.fromISO(repeatDueAt);
+    const parsedDueAtMaybe = DateTime.fromISO(String(repeatDueAt));
     // @ts-ignore: luxon adds .invalid if the timestamp is not parsable.
     if (!parsedDueAtMaybe.invalid) {
       return parsedDueAtMaybe;
@@ -143,57 +181,33 @@ export function parseFsrsFromFrontmatter(
   return undefined;
 }
 
-export function formRepetition(
-  parsedRepeat: Repeat,
-  repeatDueAt: string | undefined,
+export function parseRepetition(
+  frontmatter: Record<string, unknown>,
   referenceDateTime?: DateTime | undefined,
-  fsrsFrontmatter?: Record<string, unknown> | null,
-): Repetition {
-  return {
-    ...parsedRepeat,
-    repeatDueAt: parseRepeatDueAt(
-      repeatDueAt,
-      referenceDateTime || DateTime.now(),
-    ),
-    fsrs: parseFsrsFromFrontmatter(fsrsFrontmatter),
-  };
-}
-
-export function parseRepetitionFields(
-  repeat: string,
-  repeatDueAt: string | undefined,
-  referenceDateTime?: DateTime | undefined,
-  fsrsFrontmatter?: Record<string, unknown> | null,
 ): Repetition | undefined {
-  const parsedRepeat = parseRepeat(repeat);
-  if (!parsedRepeat) {
+  if (!isRevisorNote(frontmatter)) {
     return undefined;
   }
-  return formRepetition(
-    parsedRepeat,
-    repeatDueAt,
-    referenceDateTime,
-    fsrsFrontmatter,
-  );
+  const reference = referenceDateTime || DateTime.now();
+  return {
+    repeatTimeOfDay: parseReviewTimeOfDay(frontmatter),
+    repeatDueAt: parseRepeatDueAt(
+      frontmatter.due_at ? String(frontmatter.due_at) : undefined,
+      reference,
+    ),
+    fsrs: parseFsrsFromFrontmatter(frontmatter),
+  };
 }
 
 export function parseRepetitionFromMarkdown(
   markdown: string,
 ): Repetition | undefined {
   const bounds = determineFrontmatterBounds(markdown);
-  if (bounds) {
-    const frontmatter = parseYaml(markdown.slice(...bounds)) || {};
-    const { repeat, due_at } = frontmatter;
-    if (repeat && !isRepeatDisabled(repeat)) {
-      return parseRepetitionFields(
-        repeat,
-        due_at || undefined,
-        undefined,
-        frontmatter,
-      );
-    }
+  if (!bounds) {
+    return undefined;
   }
-  return undefined;
+  const frontmatter = parseYaml(markdown.slice(...bounds)) || {};
+  return parseRepetition(frontmatter);
 }
 
 export function parseTime(twentyFourHourTime: string) {

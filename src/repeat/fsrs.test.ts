@@ -10,7 +10,7 @@ import {
   enumToState,
   repetitionToFsrsCard,
 } from './fsrs';
-import { parseRepetitionFields } from './parsers';
+import { parseRepetition } from './parsers';
 import { serializeFsrsState, serializeRepetition } from './serializers';
 import { Repetition } from './repeatTypes';
 
@@ -28,14 +28,17 @@ const mockSettings = {
 const referenceDueAt = '2024-06-01T06:00:00.000-05:00';
 const mockNow = DateTime.fromObject({ year: 2024, month: 6, day: 15, hour: 10 });
 
-describe('parseRepetitionFields FSRS', () => {
-  test('parses repeat: fsrs', () => {
-    const repetition = parseRepetitionFields('fsrs', referenceDueAt);
+describe('parseRepetition FSRS', () => {
+  test('parses note with due_at', () => {
+    const repetition = parseRepetition({ due_at: referenceDueAt });
     expect(repetition?.repeatTimeOfDay).toBe('AM');
   });
 
-  test('parses fsrs in the evening', () => {
-    const repetition = parseRepetitionFields('fsrs in the evening', referenceDueAt);
+  test('parses evening review time', () => {
+    const repetition = parseRepetition({
+      due_at: referenceDueAt,
+      review_time_of_day: 'PM',
+    });
     expect(repetition?.repeatTimeOfDay).toBe('PM');
   });
 
@@ -50,12 +53,10 @@ describe('parseRepetitionFields FSRS', () => {
       lapses: 0,
       last_review: '2024-06-01T06:00:00.000-05:00',
     };
-    const repetition = parseRepetitionFields(
-      'fsrs',
-      referenceDueAt,
-      undefined,
-      { fsrs: fsrsBlock },
-    );
+    const repetition = parseRepetition({
+      due_at: referenceDueAt,
+      fsrs: fsrsBlock,
+    });
     expect(repetition?.fsrs).toEqual({
       state: 'review',
       stability: 8.42,
@@ -70,7 +71,7 @@ describe('parseRepetitionFields FSRS', () => {
 });
 
 describe('serializeRepetition FSRS', () => {
-  test('serializes fsrs state as JSON', () => {
+  test('serializes fsrs state without repeat field', () => {
     const repetition: Repetition = {
       repeatTimeOfDay: 'AM',
       repeatDueAt: DateTime.fromISO(referenceDueAt),
@@ -86,7 +87,8 @@ describe('serializeRepetition FSRS', () => {
       },
     };
     const serialized = serializeRepetition(repetition);
-    expect(serialized.repeat).toBe('fsrs');
+    expect(serialized.repeat).toBeUndefined();
+    expect(serialized.review_time_of_day).toBe('AM');
     expect(JSON.parse(String(serialized.fsrs))).toMatchObject({
       state: 'review',
       stability: 8.42,
@@ -109,12 +111,11 @@ describe('serializeRepetition FSRS', () => {
       },
     };
     const serialized = serializeRepetition(repetition);
-    const parsed = parseRepetitionFields(
-      String(serialized.repeat),
-      String(serialized.due_at),
-      undefined,
-      { fsrs: serialized.fsrs },
-    );
+    const parsed = parseRepetition({
+      due_at: serialized.due_at,
+      review_time_of_day: serialized.review_time_of_day,
+      fsrs: serialized.fsrs,
+    });
     expect(parsed?.repeatTimeOfDay).toBe('AM');
     expect(parsed?.fsrs?.state).toBe('learning');
     expect(parsed?.fsrs?.learningSteps).toBe(1);

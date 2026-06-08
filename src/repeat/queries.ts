@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import { Literal, DataviewApi, DataArray } from 'obsidian-dataview';
 
-import { isRepeatDisabled, parseRepetitionFields } from './parsers';
+import { parseRepetition } from './parsers';
 
 export interface TagStats {
   tag: string;
@@ -18,17 +18,7 @@ export function getNotesDue(
   return dv?.pages(filterQuery || undefined)
     .mutate((page: any) => {
       const frontmatter = page.file.frontmatter || {};
-      const { repeat, due_at } = frontmatter;
-      if (isRepeatDisabled(repeat) || !repeat) {
-        page.repetition = undefined;
-        return page;
-      }
-      page.repetition = parseRepetitionFields(
-        repeat,
-        due_at,
-        page.file.ctime,
-        frontmatter,
-      );
+      page.repetition = parseRepetition(frontmatter, page.file.ctime);
       return page;
     })
     .where((page: any) => {

@@ -38,6 +38,23 @@ const RATING_BUTTON_COLOR: Record<Rating, string | undefined> = {
   [Rating.Easy]: '#2980b9',
 };
 
+const RATING_KEY_MAP: Record<string, Rating> = {
+  '1': Rating.Again,
+  '2': Rating.Hard,
+  '3': Rating.Good,
+  '4': Rating.Easy,
+};
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  return target.isContentEditable
+    || target.tagName === 'INPUT'
+    || target.tagName === 'TEXTAREA'
+    || target.tagName === 'SELECT';
+}
+
 export interface RepeatViewPluginHost {
   setActiveRepeatView(view: RepeatView | undefined): void;
 }
@@ -174,25 +191,38 @@ class RepeatView extends ItemView {
   }
 
   handleKeyDownImpl(event: KeyboardEvent) {
-    if (!this.isActiveView()) {
+    if (!this.isActiveView() || isTypingTarget(event.target)) {
       return;
     }
-    if (event.key !== ' ' && event.code !== 'Space') {
+
+    const isBlurred = this.markdownContainer?.classList.contains('repeat-markdown_blurred');
+
+    if (isBlurred) {
+      if (event.key === ' ' || event.code === 'Space') {
+        event.preventDefault();
+        event.stopPropagation();
+        this.unblurNote();
+      }
       return;
     }
-    const target = event.target as HTMLElement;
-    if (target.isContentEditable
-      || target.tagName === 'INPUT'
-      || target.tagName === 'TEXTAREA'
-      || target.tagName === 'SELECT') {
+
+    if (!this.currentFile) {
       return;
     }
-    if (!this.markdownContainer?.classList.contains('repeat-markdown_blurred')) {
+
+    if (event.key === ' ' || event.code === 'Space') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.applyRating(Rating.Good);
       return;
     }
-    event.preventDefault();
-    event.stopPropagation();
-    this.unblurNote();
+
+    const rating = RATING_KEY_MAP[event.key];
+    if (rating) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.applyRating(rating);
+    }
   }
 
   unblurNote() {

@@ -1,6 +1,6 @@
 jest.mock('obsidian', () => {}, { virtual: true });
 import { DateTime } from 'luxon';
-import { parseRepetitionFields } from './parsers';
+import { parseRepetition } from './parsers';
 import { serializeRepetition } from './serializers';
 import { Repetition } from './repeatTypes';
 
@@ -23,19 +23,19 @@ describe('serializeRepetition round trip', () => {
   };
 
   test('retains fsrs repetition fields', () => {
-    const { repeat, due_at, fsrs } = serializeRepetition(fsrsRepetition);
-    const roundTripped = parseRepetitionFields(
-      String(repeat),
-      String(due_at ?? ''),
-      undefined,
-      { fsrs },
-    );
+    const serialized = serializeRepetition(fsrsRepetition);
+    const roundTripped = parseRepetition({
+      due_at: serialized.due_at,
+      review_time_of_day: serialized.review_time_of_day,
+      fsrs: serialized.fsrs,
+    });
     expect(roundTripped).toEqual(fsrsRepetition);
   });
 
-  test('serializes evening repeat string', () => {
+  test('serializes evening review time', () => {
     const evening = { ...fsrsRepetition, repeatTimeOfDay: 'PM' as const };
-    const { repeat } = serializeRepetition(evening);
-    expect(repeat).toBe('fsrs in the evening');
+    const serialized = serializeRepetition(evening);
+    expect(serialized.review_time_of_day).toBe('PM');
+    expect(serialized.repeat).toBeUndefined();
   });
 });
