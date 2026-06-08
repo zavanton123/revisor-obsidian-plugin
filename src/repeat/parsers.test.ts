@@ -1,280 +1,77 @@
 jest.mock('obsidian', () => {}, { virtual: true });
 import { DateTime } from 'luxon';
-import { parseRepetitionFields } from './parsers';
-
-type RepeatTestInputs = {
-  repeat: string,
-  overrides?: any,
-}
+import { parseRepetitionFields, parseRepeat, isFsrsRepeat } from './parsers';
 
 const referenceRepeatDueAt = '2022-03-04T06:00:00.000-05:00';
 
-describe('parseRepetitionFields', () => {
-  const expectedRepetition = {
-    repeatStrategy: 'PERIODIC',
-    repeatPeriod: 1,
-    repeatPeriodUnit: 'DAY',
-    repeatTimeOfDay: 'AM',
-    repeatDueAt: DateTime.fromISO(referenceRepeatDueAt),
-    hidden: false,
-    virtual: false,
-  };
-  test.concurrent.each([
-    {
-      repeat: 'daily',
-    },
-    {
-      repeat: 'weekly',
-      overrides: {
-        repeatPeriodUnit: 'WEEK',
-      },
-    },
-    {
-      repeat: 'monthly',
-      overrides: {
-        repeatPeriodUnit: 'MONTH',
-      },
-    },
-    {
-      repeat: 'yearly',
-      overrides: {
-        repeatPeriodUnit: 'YEAR',
-      },
-    },
-    {
-      repeat: 'annually',
-      overrides: {
-        repeatPeriodUnit: 'YEAR',
-      },
-    },
-  ])('parses $repeat', ({ repeat, overrides = {} }: RepeatTestInputs) => {
-    const repetition = parseRepetitionFields(repeat, referenceRepeatDueAt);
-    expect(repetition).toEqual({
-      ...expectedRepetition,
-      ...overrides
-    });
+describe('parseRepeat', () => {
+  test('parses fsrs', () => {
+    expect(parseRepeat('fsrs')).toEqual({ repeatTimeOfDay: 'AM' });
   });
 
-  test.concurrent.each([
-    {
-      repeat: 'spaced daily',
-    },
-    {
-      repeat: 'spaced weekly',
-      overrides: {
-        repeatPeriodUnit: 'WEEK',
-      },
-    },
-    {
-      repeat: 'spaced monthly',
-      overrides: {
-        repeatPeriodUnit: 'MONTH',
-      },
-    },
-    {
-      repeat: 'spaced yearly',
-      overrides: {
-        repeatPeriodUnit: 'YEAR',
-      },
-    },
-    {
-      repeat: 'spaced annually',
-      overrides: {
-        repeatPeriodUnit: 'YEAR',
-      },
-    },
-  ])('parses $repeat', ({ repeat, overrides = {} }: RepeatTestInputs) => {
-    const repetition = parseRepetitionFields(repeat, referenceRepeatDueAt);
-    expect(repetition).toEqual({
-      ...expectedRepetition,
-      ...overrides,
-      repeatStrategy: 'SPACED',
-    });
+  test('parses fsrs in the evening', () => {
+    expect(parseRepeat('fsrs in the evening')).toEqual({ repeatTimeOfDay: 'PM' });
+  });
+
+  test('rejects legacy periodic strings', () => {
+    expect(parseRepeat('daily')).toBeUndefined();
+    expect(parseRepeat('spaced every day')).toBeUndefined();
+    expect(parseRepeat('every week')).toBeUndefined();
+  });
+});
+
+describe('isFsrsRepeat', () => {
+  test('matches fsrs repeat strings', () => {
+    expect(isFsrsRepeat('fsrs')).toBe(true);
+    expect(isFsrsRepeat('FSRS in the evening')).toBe(true);
+    expect(isFsrsRepeat('daily')).toBe(false);
   });
 });
 
 describe('parseRepetitionFields', () => {
-  const expectedRepetition = {
-    repeatStrategy: 'PERIODIC',
-    repeatPeriod: 1,
-    repeatPeriodUnit: 'DAY',
-    repeatTimeOfDay: 'AM',
-    repeatDueAt: DateTime.fromISO(referenceRepeatDueAt),
-    hidden: false,
-    virtual: false,
-  };
-  const makeUnitCases = (unit: string) => ([{
-    repeat: `every ${unit}`,
-    overrides: {
-      repeatPeriodUnit: unit.toUpperCase(),
-    },
-  },
-  {
-    repeat: `every ${unit} in the morning`,
-    overrides: {
-      repeatPeriodUnit: unit.toUpperCase(),
-    },
-  },
-  {
-    repeat: `every ${unit} in the evening`,
-    overrides: {
-      repeatPeriodUnit: unit.toUpperCase(),
-      repeatTimeOfDay: 'PM',
-    },
-  },
-  {
-    repeat: `every ${unit} am`,
-    overrides: {
-      repeatPeriodUnit: unit.toUpperCase(),
-    },
-  },
-  {
-    repeat: `every ${unit} pm`,
-    overrides: {
-      repeatPeriodUnit: unit.toUpperCase(),
-      repeatTimeOfDay: 'PM',
-    },
-  },
-  {
-    repeat: `every 20 ${unit}s in the morning`,
-    overrides: {
-      repeatPeriod: 20,
-      repeatPeriodUnit: unit.toUpperCase(),
-    },
-  }]);
+  test('parses fsrs note', () => {
+    const repetition = parseRepetitionFields('fsrs', referenceRepeatDueAt);
+    expect(repetition).toEqual({
+      repeatTimeOfDay: 'AM',
+      repeatDueAt: DateTime.fromISO(referenceRepeatDueAt),
+      virtual: false,
+      fsrs: undefined,
+    });
+  });
 
-  test.concurrent.each([
-    ...makeUnitCases('day'),
-    ...makeUnitCases('week'),
-    ...makeUnitCases('month'),
-    ...makeUnitCases('year'),
-    ...makeUnitCases('hour').map((testCase) => ({
-      repeat: `spaced ${testCase.repeat}`,
-      overrides: {
-        ...testCase.overrides,
-        repeatStrategy: 'SPACED',
+  test('returns undefined for legacy repeat strings', () => {
+    expect(parseRepetitionFields('daily', referenceRepeatDueAt)).toBeUndefined();
+    expect(parseRepetitionFields('spaced every day', referenceRepeatDueAt)).toBeUndefined();
+  });
+
+  test('parses fsrs frontmatter block', () => {
+    const repetition = parseRepetitionFields(
+      'fsrs',
+      referenceRepeatDueAt,
+      undefined,
+      {
+        fsrs: {
+          state: 'review',
+          stability: 8.42,
+          reps: 5,
+        },
       },
-    })),
-  ])(
-    'parses $repeat', ({ repeat, overrides = {} }: RepeatTestInputs) => {
-    const repetition = parseRepetitionFields(repeat, referenceRepeatDueAt);
-    expect(repetition).toEqual({
-      ...expectedRepetition,
-      ...overrides
+    );
+    expect(repetition?.fsrs).toMatchObject({
+      state: 'review',
+      stability: 8.42,
+      reps: 5,
     });
   });
-});
 
-test('spaced without period specified', () => {
-  const repetition = parseRepetitionFields('spaced', referenceRepeatDueAt) as any;
-  delete repetition.repeatDueAt;
-  expect(repetition).toEqual({
-    repeatStrategy: 'SPACED',
-    repeatPeriod: 1,
-    repeatPeriodUnit: 'DAY',
-    repeatTimeOfDay: 'AM',
-    hidden: false,
-    virtual: false,
-  });
-});
-
-describe('parseRepetitionFields - invalid inputs', () => {
-  // Default settings use SPACED strategy
-  const expectedDefault = {
-    repeatStrategy: 'SPACED',
-    repeatPeriod: 1,
-    repeatPeriodUnit: 'DAY',
-    repeatTimeOfDay: 'AM',
-    hidden: false,
-    virtual: false,
-  };
-
-  test('empty string returns default repetition', () => {
-    const repetition = parseRepetitionFields('', referenceRepeatDueAt) as any;
-    delete repetition.repeatDueAt;
-    expect(repetition).toEqual(expectedDefault);
-  });
-
-  test('unrecognized string returns default repetition', () => {
-    const repetition = parseRepetitionFields('gibberish', referenceRepeatDueAt) as any;
-    delete repetition.repeatDueAt;
-    expect(repetition).toEqual(expectedDefault);
-  });
-
-  test('partial match returns default repetition', () => {
-    const repetition = parseRepetitionFields('dai', referenceRepeatDueAt) as any;
-    delete repetition.repeatDueAt;
-    expect(repetition).toEqual(expectedDefault);
-  });
-
-  test('handles whitespace-only string', () => {
-    const repetition = parseRepetitionFields('   ', referenceRepeatDueAt) as any;
-    delete repetition.repeatDueAt;
-    expect(repetition).toEqual(expectedDefault);
-  });
-
-  test('invalid due_at date is handled gracefully', () => {
-    const repetition = parseRepetitionFields('daily', 'not-a-date');
-    expect(repetition.repeatDueAt).toBeDefined();
-    expect(repetition.repeatDueAt.isValid).toBe(true);
-  });
-
-  test('undefined due_at creates future date', () => {
-    const repetition = parseRepetitionFields('daily', undefined);
-    expect(repetition.repeatDueAt).toBeDefined();
-    expect(repetition.repeatDueAt.isValid).toBe(true);
-  });
-});
-
-describe('parseRepetitionFields - weekday parsing', () => {
-  const expectedBaseRepetition = {
-    repeatStrategy: 'PERIODIC',
-    repeatPeriod: 1,
-    repeatPeriodUnit: 'WEEKDAYS',
-    repeatTimeOfDay: 'AM',
-    repeatDueAt: DateTime.fromISO(referenceRepeatDueAt),
-    hidden: false,
-    virtual: false,
-  };
-
-  test.concurrent.each([
-    {
-      repeat: 'every tuesday',
-      expectedWeekdays: ['tuesday'],
-    },
-    {
-      repeat: 'every tue',
-      expectedWeekdays: ['tuesday'],
-    },
-    {
-      repeat: 'every monday, wednesday',
-      expectedWeekdays: ['monday', 'wednesday'],
-    },
-    {
-      repeat: 'every mon, wed, fri',
-      expectedWeekdays: ['monday', 'wednesday', 'friday'],
-    },
-    {
-      repeat: 'every Tuesday, Wed and Thu',
-      expectedWeekdays: ['tuesday', 'wednesday', 'thursday'],
-    },
-    {
-      repeat: 'every tuesday in the evening',
-      expectedWeekdays: ['tuesday'],
-      expectedTimeOfDay: 'PM',
-    },
-    {
-      repeat: 'spaced every tuesday',
-      expectedWeekdays: ['tuesday'],
-      expectedStrategy: 'SPACED',
-    },
-  ])('parses $repeat', ({ repeat, expectedWeekdays, expectedTimeOfDay, expectedStrategy }) => {
-    const repetition = parseRepetitionFields(repeat, referenceRepeatDueAt);
-    expect(repetition).toEqual({
-      ...expectedBaseRepetition,
-      repeatWeekdays: expectedWeekdays,
-      ...(expectedTimeOfDay && { repeatTimeOfDay: expectedTimeOfDay }),
-      ...(expectedStrategy && { repeatStrategy: expectedStrategy }),
-    });
+  test('invalid due_at falls back to reference time', () => {
+    const repetition = parseRepetitionFields(
+      'fsrs',
+      'not-a-date',
+      DateTime.fromISO('2024-01-01T06:00:00.000Z'),
+    );
+    expect(repetition?.repeatDueAt.toMillis()).toBe(
+      DateTime.fromISO('2024-01-01T06:00:00.000Z').toMillis(),
+    );
   });
 });

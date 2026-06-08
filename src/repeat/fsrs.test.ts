@@ -18,7 +18,6 @@ const mockSettings = {
   morningReviewTime: '06:00',
   eveningReviewTime: '18:00',
   enqueueNonRepeatingNotes: false,
-  fsrsEnabled: true,
   fsrsRequestRetention: 0.9,
   fsrsMaximumInterval: 36500,
   fsrsEnableFuzz: false,
@@ -26,12 +25,7 @@ const mockSettings = {
   fsrsLearningSteps: '1m, 10m',
   fsrsRelearningSteps: '10m',
   fsrsWeights: null,
-  defaultRepeat: {
-    repeatStrategy: 'SPACED',
-    repeatPeriod: 1,
-    repeatPeriodUnit: 'DAY',
-    repeatTimeOfDay: 'AM',
-  },
+  defaultRepeat: { repeatTimeOfDay: 'AM' },
 };
 
 const referenceDueAt = '2024-06-01T06:00:00.000-05:00';
@@ -40,14 +34,12 @@ const mockNow = DateTime.fromObject({ year: 2024, month: 6, day: 15, hour: 10 })
 describe('parseRepetitionFields FSRS', () => {
   test('parses repeat: fsrs', () => {
     const repetition = parseRepetitionFields('fsrs', referenceDueAt);
-    expect(repetition.repeatStrategy).toBe('FSRS');
-    expect(repetition.repeatPeriodUnit).toBe('DAY');
+    expect(repetition?.repeatTimeOfDay).toBe('AM');
   });
 
   test('parses fsrs in the evening', () => {
     const repetition = parseRepetitionFields('fsrs in the evening', referenceDueAt);
-    expect(repetition.repeatStrategy).toBe('FSRS');
-    expect(repetition.repeatTimeOfDay).toBe('PM');
+    expect(repetition?.repeatTimeOfDay).toBe('PM');
   });
 
   test('parses nested fsrs frontmatter block', () => {
@@ -65,10 +57,9 @@ describe('parseRepetitionFields FSRS', () => {
       'fsrs',
       referenceDueAt,
       undefined,
-      undefined,
       { fsrs: fsrsBlock },
     );
-    expect(repetition.fsrs).toEqual({
+    expect(repetition?.fsrs).toEqual({
       state: 'review',
       stability: 8.42,
       difficulty: 4.7,
@@ -84,12 +75,8 @@ describe('parseRepetitionFields FSRS', () => {
 describe('serializeRepetition FSRS', () => {
   test('serializes fsrs state as JSON', () => {
     const repetition: Repetition = {
-      repeatStrategy: 'FSRS',
-      repeatPeriod: 1,
-      repeatPeriodUnit: 'DAY',
       repeatTimeOfDay: 'AM',
       repeatDueAt: DateTime.fromISO(referenceDueAt),
-      hidden: false,
       virtual: false,
       fsrs: {
         state: 'review',
@@ -113,12 +100,8 @@ describe('serializeRepetition FSRS', () => {
 
   test('round-trips fsrs frontmatter', () => {
     const repetition: Repetition = {
-      repeatStrategy: 'FSRS',
-      repeatPeriod: 1,
-      repeatPeriodUnit: 'DAY',
       repeatTimeOfDay: 'AM',
       repeatDueAt: DateTime.fromISO(referenceDueAt),
-      hidden: true,
       virtual: false,
       fsrs: {
         state: 'learning',
@@ -134,14 +117,12 @@ describe('serializeRepetition FSRS', () => {
     const parsed = parseRepetitionFields(
       String(serialized.repeat),
       String(serialized.due_at),
-      String(serialized.hidden),
       undefined,
       { fsrs: serialized.fsrs },
     );
-    expect(parsed.repeatStrategy).toBe('FSRS');
-    expect(parsed.hidden).toBe(true);
-    expect(parsed.fsrs?.state).toBe('learning');
-    expect(parsed.fsrs?.learningSteps).toBe(1);
+    expect(parsed?.repeatTimeOfDay).toBe('AM');
+    expect(parsed?.fsrs?.state).toBe('learning');
+    expect(parsed?.fsrs?.learningSteps).toBe(1);
   });
 });
 
@@ -151,7 +132,7 @@ describe('getRepeatChoices FSRS', () => {
     DateTime.now = () => mockNow;
 
     try {
-      const repetition = createInitialFsrsRepetition(mockSettings as any, false);
+      const repetition = createInitialFsrsRepetition(mockSettings as any);
       repetition.repeatDueAt = mockNow.minus({ hours: 1 });
       const choices = getRepeatChoices(repetition, mockSettings as any);
 
@@ -169,7 +150,7 @@ describe('fsrs scheduler helpers', () => {
   test('buildScheduler produces valid preview states', () => {
     const scheduler = buildScheduler(mockSettings as any);
     const card = repetitionToFsrsCard(
-      createInitialFsrsRepetition(mockSettings as any, false),
+      createInitialFsrsRepetition(mockSettings as any),
       mockNow.toJSDate(),
     );
     const preview = scheduler.repeat(card, mockNow.toJSDate());

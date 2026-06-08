@@ -255,17 +255,14 @@ class RepeatView extends ItemView {
 
     // Add container for markdown content.
     const markdownContainer = createEl('div', {
-      cls: 'markdown-embed-content',
+      cls: 'markdown-embed-content repeat-markdown_blurred',
     });
-    if ((page?.repetition as any)?.hidden) {
-      markdownContainer.addClass('repeat-markdown_blurred');
-      const onBlurredClick = (event) => {
-        event.preventDefault();
-        markdownContainer.removeClass('repeat-markdown_blurred');
-      }
-      markdownContainer.addEventListener(
-        'click', onBlurredClick, { once: true });
-    }
+    const onBlurredClick = (event: Event) => {
+      event.preventDefault();
+      markdownContainer.removeClass('repeat-markdown_blurred');
+    };
+    markdownContainer.addEventListener(
+      'click', onBlurredClick, { once: true });
 
     this.previewContainer.appendChild(markdownContainer);
 

@@ -14,11 +14,10 @@ import { RepeatPluginSettings, DEFAULT_SETTINGS } from './settings';
 import { updateRepetitionMetadata } from './frontmatter';
 import { getAPI } from 'obsidian-dataview';
 import { getNotesDue } from './repeat/queries';
-import { parseHiddenFieldFromMarkdown, parseRepeat, parseRepetitionFromMarkdown } from './repeat/parsers';
+import { parseRepeat, parseRepetitionFromMarkdown } from './repeat/parsers';
 import { serializeRepeat, serializeRepetition } from './repeat/serializers';
-import { incrementRepeatDueAt } from './repeat/choices';
 import { createInitialFsrsRepetition } from './repeat/fsrs';
-import { PeriodUnit, Repetition, Strategy, TimeOfDay } from './repeat/repeatTypes';
+import { Repetition } from './repeat/repeatTypes';
 
 const COUNT_DEBOUNCE_MS = 5 * 1000;
 
@@ -37,10 +36,8 @@ export default class RepeatPlugin extends Plugin {
   }
 
   async activateRepeatNotesDueView() {
-    // Allow only one repeat view.
     this.app.workspace.detachLeavesOfType(REPEATING_NOTES_DUE_VIEW);
 
-    // Create a new leaf for the view.
     await this.app.workspace.getLeaf(true).setViewState({
       type: REPEATING_NOTES_DUE_VIEW,
       active: true,
@@ -100,13 +97,11 @@ export default class RepeatPlugin extends Plugin {
   }
 
   manageStatusBarItem() {
-    // Create status bar item immediately so it's visible right away.
     this.makeStatusBarItem();
 
     const dv = getAPI(this.app);
     const onIndexReady = () => {
       this.updateNotesDueCount();
-      // Update due note count whenever metadata changes.
       setTimeout(() => {
         this.registerEvent(
           this.app.metadataCache.on(
@@ -118,8 +113,6 @@ export default class RepeatPlugin extends Plugin {
       }, COUNT_DEBOUNCE_MS);
     };
 
-    // If Dataview index is already ready, update immediately.
-    // Otherwise, wait for the index-ready event.
     if (dv?.index.initialized) {
       onIndexReady();
     } else {
@@ -131,7 +124,6 @@ export default class RepeatPlugin extends Plugin {
       );
     }
 
-    // Periodically update due note count as notes become due.
     const FIVE_MINUTES_IN_MS = 5 * 60 * 1000;
     this.registerInterval(
       window.setInterval(this.updateNotesDueCount, FIVE_MINUTES_IN_MS)
@@ -193,76 +185,6 @@ export default class RepeatPlugin extends Plugin {
       },
     });
 
-    ['day', 'week', 'month', 'year'].map((unit) => {
-      this.addCommand({
-        id: `repeat-every-${unit}`,
-        name: `Repeat this note every ${unit}`,
-        checkCallback: (checking: boolean) => {
-          const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-          if (markdownView && !!markdownView.file) {
-            if (!checking) {
-              const { editor, file } = markdownView;
-              const content = editor.getValue();
-              const repeat = {
-                repeatStrategy: 'PERIODIC' as Strategy,
-                repeatPeriod: 1,
-                repeatPeriodUnit: unit.toUpperCase() as PeriodUnit,
-                repeatTimeOfDay: 'AM' as TimeOfDay,
-              };
-              const repeatDueAt = incrementRepeatDueAt({
-                ...repeat,
-                repeatDueAt: undefined,
-              } as any, this.settings);
-              const newContent = updateRepetitionMetadata(content, serializeRepetition({
-                ...repeat,
-                hidden: parseHiddenFieldFromMarkdown(content)
-                  ?? this.settings.hiddenFieldDefaultValue,
-                repeatDueAt,
-                virtual: false,
-              }));
-              this.app.vault.modify(file, newContent);
-            }
-            return true;
-          }
-          return false;
-        }
-      });
-    });
-
-    this.addCommand({
-      id: 'repeat-spaced',
-      name: 'Repeat this note (spaced)',
-      checkCallback: (checking: boolean) => {
-        const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (markdownView && !!markdownView.file) {
-          if (!checking) {
-            const { editor, file } = markdownView;
-            const content = editor.getValue();
-            const repeat = {
-              repeatStrategy: 'SPACED' as Strategy,
-              repeatPeriod: 1,
-              repeatPeriodUnit: 'DAY' as PeriodUnit,
-              repeatTimeOfDay: 'AM' as TimeOfDay,
-            };
-            const repeatDueAt = incrementRepeatDueAt({
-              ...repeat,
-              repeatDueAt: undefined,
-            } as any, this.settings);
-            const newContent = updateRepetitionMetadata(content, serializeRepetition({
-              ...repeat,
-              hidden: parseHiddenFieldFromMarkdown(content)
-                ?? this.settings.hiddenFieldDefaultValue,
-              repeatDueAt,
-              virtual: false,
-            }));
-            this.app.vault.modify(file, newContent);
-          }
-          return true;
-        }
-        return false;
-      }
-    });
-
     this.addCommand({
       id: 'repeat-fsrs',
       name: 'Repeat this note (FSRS)',
@@ -272,11 +194,7 @@ export default class RepeatPlugin extends Plugin {
           if (!checking) {
             const { editor, file } = markdownView;
             const content = editor.getValue();
-            const repetition = createInitialFsrsRepetition(
-              this.settings,
-              parseHiddenFieldFromMarkdown(content)
-                ?? this.settings.hiddenFieldDefaultValue,
-            );
+            const repetition = createInitialFsrsRepetition(this.settings);
             const newContent = updateRepetitionMetadata(
               content,
               serializeRepetition(repetition),
@@ -403,15 +321,17 @@ class RepeatPluginSettingTab extends PluginSettingTab {
         });
 
       new Setting(containerEl)
-        .setName('Default `repeat` property')
-        .setDesc('Used to populate "Repeat this note..." command\'s modal. Ignored if the supplied value is not parsable.')
+        .setName('Default review time of day')
+        .setDesc('Default AM/PM preference for new FSRS notes.')
         .addText((component) => {
           return component
             .setValue(serializeRepeat(this.plugin.settings.defaultRepeat))
             .onChange(async (value) => {
               const newRepeat = parseRepeat(value);
-              this.plugin.settings.defaultRepeat = newRepeat;
-              await this.plugin.saveSettings();
+              if (newRepeat) {
+                this.plugin.settings.defaultRepeat = newRepeat;
+                await this.plugin.saveSettings();
+              }
             });
         });
 
@@ -425,27 +345,7 @@ class RepeatPluginSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }));
 
-      new Setting(containerEl)
-        .setName('Hidden field default value')
-        .setDesc('Default value of the "Hidden" toggle when opening the "Repeat this note..." window for a note that is not yet repeating.')
-        .addToggle(component => component
-          .setValue(this.plugin.settings.hiddenFieldDefaultValue)
-          .onChange(async (value) => {
-            this.plugin.settings.hiddenFieldDefaultValue = value;
-            await this.plugin.saveSettings();
-          }));
-
       containerEl.createEl('h3', { text: 'FSRS Settings' });
-
-      new Setting(containerEl)
-        .setName('Enable FSRS scheduling')
-        .setDesc('Show FSRS as a repeat type in setup and enable FSRS review buttons.')
-        .addToggle(component => component
-          .setValue(this.plugin.settings.fsrsEnabled)
-          .onChange(async (value) => {
-            this.plugin.settings.fsrsEnabled = value;
-            await this.plugin.saveSettings();
-          }));
 
       new Setting(containerEl)
         .setName('Desired retention')

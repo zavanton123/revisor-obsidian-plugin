@@ -135,17 +135,12 @@ export function fsrsCardToRepetition(
 
 export function createInitialFsrsRepetition(
   settings: RepeatPluginSettings,
-  hidden: boolean,
 ): Repetition {
   const now = DateTime.now();
   const card = createEmptyCard(now.toJSDate());
   return {
-    repeatStrategy: 'FSRS',
-    repeatPeriod: 1,
-    repeatPeriodUnit: 'DAY',
     repeatTimeOfDay: settings.defaultRepeat.repeatTimeOfDay,
     repeatDueAt: now,
-    hidden,
     virtual: false,
     fsrs: cardToFsrsState(card),
   };

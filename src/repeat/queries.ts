@@ -21,7 +21,7 @@ export function getNotesDue(
   return dv?.pages(filterQuery || undefined)
     .mutate((page: any) => {
       const frontmatter = page.file.frontmatter || {};
-      const { repeat, due_at, hidden } = frontmatter;
+      const { repeat, due_at } = frontmatter;
       if (isRepeatDisabled(repeat)) {
         page.repetition = undefined;
         return page;
@@ -30,7 +30,6 @@ export function getNotesDue(
         if (enqueueNonRepeatingNotes) {
           page.repetition = formRepetition(
             defaultRepeat,
-            undefined,
             undefined,
             page.file.ctime,
             true,
@@ -45,7 +44,6 @@ export function getNotesDue(
         page.repetition = parseRepetitionFields(
           repeat,
           due_at,
-          hidden,
           page.file.ctime,
           frontmatter,
         );

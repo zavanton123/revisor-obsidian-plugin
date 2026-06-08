@@ -2,7 +2,7 @@ import { Repeat } from "./repeat/repeatTypes";
 
 export interface SavedFilter {
   name: string;
-  query: string;  // Dataview FROM expression, e.g. "#math" or "#math AND \"Courses\""
+  query: string;
 }
 
 export interface RepeatPluginSettings {
@@ -13,10 +13,8 @@ export interface RepeatPluginSettings {
   eveningReviewTime: string;
   defaultRepeat: Repeat;
   enqueueNonRepeatingNotes: boolean;
-  hiddenFieldDefaultValue: boolean;
-  filterQuery: string;              // Current Dataview FROM expression
-  savedFilters: SavedFilter[];      // Named filter presets
-  fsrsEnabled: boolean;
+  filterQuery: string;
+  savedFilters: SavedFilter[];
   fsrsRequestRetention: number;
   fsrsMaximumInterval: number;
   fsrsEnableFuzz: boolean;
@@ -33,16 +31,11 @@ export const DEFAULT_SETTINGS: RepeatPluginSettings = {
   morningReviewTime: '06:00',
   eveningReviewTime: '18:00',
   defaultRepeat: {
-    repeatStrategy: 'SPACED',
-    repeatPeriod: 1,
-    repeatPeriodUnit: 'DAY',
     repeatTimeOfDay: 'AM',
   },
   enqueueNonRepeatingNotes: false,
-  hiddenFieldDefaultValue: false,
   filterQuery: '',
   savedFilters: [],
-  fsrsEnabled: true,
   fsrsRequestRetention: 0.9,
   fsrsMaximumInterval: 36500,
   fsrsEnableFuzz: true,

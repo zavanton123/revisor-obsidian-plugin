@@ -1,5 +1,3 @@
-import { SERIALIZED_FALSE } from "./repeat/serializers";
-
 export type Bounds = [number, number] | null;
 
 
@@ -159,15 +157,6 @@ export function updateRepetitionMetadata(
   }
   let frontmatter = content.slice(...bounds);
   for (const field in serializedRepetition) {
-    if (field === 'hidden') {
-      const hiddenBounds = determineInlineFieldBounds(frontmatter, 'hidden');
-      // If 'hidden' is not already in the note and the new value is 'false',
-      // then don't add it. This keeps the 'hidden' field optional.
-      if (!hiddenBounds?.length
-          && serializedRepetition['hidden'] === SERIALIZED_FALSE) {
-        continue;
-      }
-    }
     if (serializedRepetition[field] === undefined) {
       frontmatter = removeField(frontmatter, field);
     } else {
