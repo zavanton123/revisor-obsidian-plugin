@@ -23,7 +23,16 @@ export type Repeat = {
 export interface Repetition extends Repeat {
   repeatDueAt: DateTime,
   fsrs?: FsrsCardState,
+  suspended?: boolean,
+  buriedUntil?: DateTime,
 }
+
+export type QueueEligibility =
+  | 'due'
+  | 'not-due'
+  | 'suspended'
+  | 'buried'
+  | 'not-revisor';
 
 export type RepeatChoice = {
   text: string,

@@ -2,13 +2,22 @@ import { DateTime } from 'luxon';
 import { Literal, DataviewApi, DataArray } from 'obsidian-dataview';
 
 import { parseRepetition } from './parsers';
+import { getQueueEligibility, isDueForReview } from './queueEligibility';
+import { QueueEligibility } from './repeatTypes';
 
 export interface TagStats {
   tag: string;
   count: number;
 }
 
-export function getNotesDue(
+export interface QueueStats {
+  due: number;
+  buried: number;
+  suspended: number;
+  notDue: number;
+}
+
+function mutateRevisorPages(
   dv: DataviewApi | undefined,
   ignoreFolderPath: string,
   ignoreFilePath?: string | undefined,
@@ -18,12 +27,11 @@ export function getNotesDue(
   return dv?.pages(filterQuery || undefined)
     .mutate((page: any) => {
       const frontmatter = page.file.frontmatter || {};
-      page.repetition = parseRepetition(frontmatter, page.file.ctime);
+      page.repetition = parseRepetition(frontmatter, now);
       return page;
     })
     .where((page: any) => {
-      const { repetition } = page;
-      if (!repetition) {
+      if (!page.repetition) {
         return false;
       }
       if (ignoreFolderPath && page.file.folder.startsWith(ignoreFolderPath)) {
@@ -32,9 +40,20 @@ export function getNotesDue(
       if (ignoreFilePath && (page.file.path === ignoreFilePath)) {
         return false;
       }
-      return repetition.repeatDueAt <= now;
-    })
-    .sort((page: any) => page.repetition.repeatDueAt, 'asc')
+      return true;
+    });
+}
+
+export function getNotesDue(
+  dv: DataviewApi | undefined,
+  ignoreFolderPath: string,
+  ignoreFilePath?: string | undefined,
+  filterQuery?: string,
+): DataArray<Record<string, Literal>> | undefined {
+  const now = DateTime.now();
+  return mutateRevisorPages(dv, ignoreFolderPath, ignoreFilePath, filterQuery)
+    ?.where((page: any) => isDueForReview(page.repetition, now))
+    .sort((page: any) => page.repetition.repeatDueAt, 'asc');
 }
 
 export function getNextDueNote(
@@ -51,6 +70,56 @@ export function getNextDueNote(
   )?.first();
   if (!page) { return; }
   return page;
+}
+
+export function getQueueStats(
+  dv: DataviewApi | undefined,
+  ignoreFolderPath: string,
+  ignoreFilePath?: string | undefined,
+  filterQuery?: string,
+): QueueStats {
+  const now = DateTime.now();
+  const stats: QueueStats = {
+    due: 0,
+    buried: 0,
+    suspended: 0,
+    notDue: 0,
+  };
+  mutateRevisorPages(dv, ignoreFolderPath, ignoreFilePath, filterQuery)
+    ?.forEach((page: any) => {
+      switch (getQueueEligibility(page.repetition, now)) {
+        case 'due':
+          stats.due += 1;
+          break;
+        case 'buried':
+          stats.buried += 1;
+          break;
+        case 'suspended':
+          stats.suspended += 1;
+          break;
+        case 'not-due':
+          stats.notDue += 1;
+          break;
+      }
+    });
+  return stats;
+}
+
+export function countByEligibility(
+  dv: DataviewApi | undefined,
+  ignoreFolderPath: string,
+  eligibility: QueueEligibility,
+  filterQuery?: string,
+): number {
+  const now = DateTime.now();
+  let count = 0;
+  mutateRevisorPages(dv, ignoreFolderPath, undefined, filterQuery)
+    ?.forEach((page: any) => {
+      if (getQueueEligibility(page.repetition, now) === eligibility) {
+        count += 1;
+      }
+    });
+  return count;
 }
 
 export function getTagsFromDueNotes(

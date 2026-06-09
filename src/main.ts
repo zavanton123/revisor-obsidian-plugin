@@ -17,6 +17,8 @@ import { getNotesDue } from './repeat/queries';
 import { serializeRepetition } from './repeat/serializers';
 import { createInitialFsrsRepetition } from './repeat/fsrs';
 import { FSRS_RATING_LABELS } from './repeat/choices';
+import { parseRepetition } from './repeat/parsers';
+import { buildQueueMetadata, QueueAction } from './repeat/queueActions';
 
 const COUNT_DEBOUNCE_MS = 5 * 1000;
 
@@ -41,6 +43,32 @@ export default class RepeatPlugin extends Plugin {
 
   applyReviewRating(rating: Rating) {
     this.activeRepeatView?.applyRating(rating);
+  }
+
+  applyReviewQueueAction(action: QueueAction) {
+    this.activeRepeatView?.requestQueueAction(action);
+  }
+
+  async applyEditorQueueAction(action: 'unsuspend' | 'unbury') {
+    const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!markdownView?.file) {
+      return;
+    }
+    const cache = this.app.metadataCache.getFileCache(markdownView.file);
+    const repetition = parseRepetition(cache?.frontmatter || {});
+    if (!repetition) {
+      return;
+    }
+    if (action === 'unsuspend' && !repetition.suspended) {
+      return;
+    }
+    if (action === 'unbury' && !repetition.buriedUntil) {
+      return;
+    }
+    const metadata = buildQueueMetadata(action, repetition, this.settings);
+    const content = await this.app.vault.read(markdownView.file);
+    const newContent = updateRepetitionMetadata(content, metadata);
+    await this.app.vault.modify(markdownView.file, newContent);
   }
 
   async activateRepeatNotesDueView() {
@@ -196,6 +224,66 @@ export default class RepeatPlugin extends Plugin {
         },
       });
     });
+
+    ([
+      ['bury', 'Bury note'],
+      ['suspend', 'Suspend note'],
+      ['forget', 'Forget note'],
+    ] as const).forEach(([action, name]) => {
+      this.addCommand({
+        id: `revisor-${action}-note`,
+        name: `Revisor: ${name}`,
+        checkCallback: (checking: boolean) => {
+          if (!this.activeRepeatView?.hasCurrentNote()) {
+            return false;
+          }
+          if (!checking) {
+            this.applyReviewQueueAction(action);
+          }
+          return true;
+        },
+      });
+    });
+
+    this.addCommand({
+      id: 'revisor-unsuspend-note',
+      name: 'Revisor: Unsuspend note',
+      checkCallback: (checking: boolean) => {
+        const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (!markdownView?.file) {
+          return false;
+        }
+        const cache = this.app.metadataCache.getFileCache(markdownView.file);
+        const repetition = parseRepetition(cache?.frontmatter || {});
+        if (!repetition?.suspended) {
+          return false;
+        }
+        if (!checking) {
+          void this.applyEditorQueueAction('unsuspend');
+        }
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: 'revisor-unbury-note',
+      name: 'Revisor: Unbury note',
+      checkCallback: (checking: boolean) => {
+        const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (!markdownView?.file) {
+          return false;
+        }
+        const cache = this.app.metadataCache.getFileCache(markdownView.file);
+        const repetition = parseRepetition(cache?.frontmatter || {});
+        if (!repetition?.buriedUntil) {
+          return false;
+        }
+        if (!checking) {
+          void this.applyEditorQueueAction('unbury');
+        }
+        return true;
+      },
+    });
   }
 
   async onload() {
@@ -328,6 +416,30 @@ class RepeatPluginSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.fsrsEnableShortTerm)
           .onChange(async (value) => {
             this.plugin.settings.fsrsEnableShortTerm = value;
+            await this.plugin.saveSettings();
+          }));
+
+      containerEl.createEl('h3', { text: 'Queue Settings' });
+
+      new Setting(containerEl)
+        .setName('Day starts at')
+        .setDesc('When the review day rolls over. Used for bury-until calculation (e.g. 06:00).')
+        .addText(component => component
+          .setValue(this.plugin.settings.dayStartsAt)
+          .onChange(async (value) => {
+            if (/^\d{1,2}:\d{2}$/.test(value.trim())) {
+              this.plugin.settings.dayStartsAt = value.trim();
+              await this.plugin.saveSettings();
+            }
+          }));
+
+      new Setting(containerEl)
+        .setName('Confirm forget')
+        .setDesc('Show a confirmation dialog before resetting FSRS progress.')
+        .addToggle(component => component
+          .setValue(this.plugin.settings.confirmForget)
+          .onChange(async (value) => {
+            this.plugin.settings.confirmForget = value;
             await this.plugin.saveSettings();
           }));
 

@@ -142,6 +142,32 @@ export function parseFsrsFromFrontmatter(
   return undefined;
 }
 
+export function parseBooleanField(value: unknown): boolean {
+  if (value === true || value === 'true') {
+    return true;
+  }
+  if (typeof value === 'string') {
+    return ['true', 'yes', '1'].includes(value.trim().toLowerCase());
+  }
+  return false;
+}
+
+function parseBuriedUntil(
+  frontmatter: Record<string, unknown>,
+  now: DateTime,
+): DateTime | undefined {
+  const raw = frontmatter.revisor_buried_until;
+  if (!raw) {
+    return undefined;
+  }
+  const parsed = DateTime.fromISO(String(raw));
+  // @ts-ignore: luxon adds .invalid if the timestamp is not parsable.
+  if (parsed.invalid || parsed <= now) {
+    return undefined;
+  }
+  return parsed;
+}
+
 export function parseRepetition(
   frontmatter: Record<string, unknown>,
   referenceDateTime?: DateTime | undefined,
@@ -157,6 +183,8 @@ export function parseRepetition(
       reference,
     ),
     fsrs: parseFsrsFromFrontmatter(frontmatter),
+    suspended: parseBooleanField(frontmatter.revisor_suspended),
+    buriedUntil: parseBuriedUntil(frontmatter, reference),
   };
 }
 

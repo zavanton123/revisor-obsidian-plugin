@@ -129,8 +129,8 @@ export function fsrsCardToRepetition(
 
 export function createInitialFsrsRepetition(
   settings: RepeatPluginSettings,
+  now: DateTime = DateTime.now(),
 ): Repetition {
-  const now = DateTime.now();
   const card = createEmptyCard(now.toJSDate());
   return {
     repeatTimeOfDay: 'AM',

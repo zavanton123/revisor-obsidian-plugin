@@ -45,6 +45,8 @@ describe('parseRepetition', () => {
       repeatTimeOfDay: 'AM',
       repeatDueAt: DateTime.fromISO(referenceRepeatDueAt),
       fsrs: undefined,
+      suspended: false,
+      buriedUntil: undefined,
     });
   });
 
@@ -78,5 +80,26 @@ describe('parseRepetition', () => {
     expect(repetition?.repeatDueAt.toMillis()).toBe(
       DateTime.fromISO('2024-01-01T06:00:00.000Z').toMillis(),
     );
+  });
+
+  test('parses suspended and buried fields', () => {
+    const now = DateTime.fromISO('2026-06-08T12:00:00.000-03:00');
+    const buriedUntil = '2026-06-09T06:00:00.000-03:00';
+    const repetition = parseRepetition({
+      due_at: referenceRepeatDueAt,
+      revisor_suspended: true,
+      revisor_buried_until: buriedUntil,
+    }, now);
+    expect(repetition?.suspended).toBe(true);
+    expect(repetition?.buriedUntil?.toISO()).toBe(buriedUntil);
+  });
+
+  test('ignores expired buried_until', () => {
+    const now = DateTime.fromISO('2026-06-08T12:00:00.000-03:00');
+    const repetition = parseRepetition({
+      due_at: referenceRepeatDueAt,
+      revisor_buried_until: '2026-06-08T06:00:00.000-03:00',
+    }, now);
+    expect(repetition?.buriedUntil).toBeUndefined();
   });
 });

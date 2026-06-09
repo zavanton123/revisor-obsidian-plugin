@@ -11,12 +11,14 @@ import { Rating } from 'ts-fsrs';
 
 import { determineFrontmatterBounds, updateRepetitionMetadata } from '../../frontmatter';
 import { getRepeatChoices } from '../choices';
-import { RepeatChoice } from '../repeatTypes';
-import { getNextDueNote, getNotesDue, getTagsFromDueNotes, TagStats } from '../queries';
+import { RepeatChoice, Repetition } from '../repeatTypes';
+import { getNextDueNote, getNotesDue, getQueueStats, getTagsFromDueNotes, TagStats } from '../queries';
+import { buildQueueMetadata, QueueAction } from '../queueActions';
 import { serializeRepetition } from '../serializers';
 import { renderMarkdown, renderTitleElement } from '../../markdown';
 import { RepeatPluginSettings } from '../../settings';
 import TextInputModal from './TextInputModal';
+import ConfirmModal from './ConfirmModal';
 
 const MODIFY_DEBOUNCE_MS = 1 * 1000;
 const QUERY_DEBOUNCE_MS = 500;
@@ -61,10 +63,13 @@ export interface RepeatViewPluginHost {
 
 class RepeatView extends ItemView {
   buttonsContainer: HTMLElement;
+  ratingsContainer: HTMLElement;
+  queueButtonsContainer: HTMLElement;
   component: Component;
   currentChoices: RepeatChoice[] = [];
   currentDueFilePath: string | undefined;
   currentFile: TFile | undefined;
+  currentRepetition: Repetition | undefined;
   dv: DataviewApi | undefined;
   icon = 'clock';
   indexPromise: Promise<null> | undefined;
@@ -102,7 +107,10 @@ class RepeatView extends ItemView {
     super(leaf);
     this.addRepeatButton = this.addRepeatButton.bind(this);
     this.applyChoice = this.applyChoice.bind(this);
+    this.applyQueueAction = this.applyQueueAction.bind(this);
     this.applyRating = this.applyRating.bind(this);
+    this.requestQueueAction = this.requestQueueAction.bind(this);
+    this.addQueueButtons = this.addQueueButtons.bind(this);
     this.disableExternalHandlers = this.disableExternalHandlers.bind(this);
     this.enableExternalHandlers = this.enableExternalHandlers.bind(this);
     this.handleExternalModifyOrDelete = debounce(
@@ -224,7 +232,69 @@ class RepeatView extends ItemView {
       event.preventDefault();
       event.stopPropagation();
       this.applyRating(rating);
+      return;
     }
+
+    if (event.key === '-') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.requestQueueAction('bury');
+      return;
+    }
+
+    if (event.key === '@') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.requestQueueAction('suspend');
+      return;
+    }
+
+    if (event.key === 'Backspace' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.requestQueueAction('forget');
+    }
+  }
+
+  hasCurrentNote(): boolean {
+    return !!this.currentFile && !!this.currentRepetition;
+  }
+
+  requestQueueAction(action: QueueAction) {
+    if (!this.currentFile || !this.currentRepetition) {
+      return;
+    }
+    if (action === 'forget' && this.settings.confirmForget) {
+      const modal = new ConfirmModal(
+        this.app,
+        'Forget note',
+        'Reset FSRS progress and make this note due now?',
+        'Forget',
+        () => {
+          void this.applyQueueAction(action);
+        },
+      );
+      modal.open();
+      return;
+    }
+    void this.applyQueueAction(action);
+  }
+
+  async applyQueueAction(action: QueueAction) {
+    const file = this.currentFile;
+    const repetition = this.currentRepetition;
+    if (!file || !repetition) {
+      return;
+    }
+    const filePath = file.path;
+    const metadata = buildQueueMetadata(action, repetition, this.settings);
+    this.resetView();
+    const markdown = await this.app.vault.read(file);
+    const newMarkdown = updateRepetitionMetadata(markdown, metadata);
+    this.currentDueFilePath = filePath;
+    await this.app.vault.modify(file, newMarkdown);
+    await this.promiseMetadataChangeOrTimeOut();
+    this.setPage();
   }
 
   unblurNote() {
@@ -320,10 +390,31 @@ class RepeatView extends ItemView {
       if (totalDue > 0 && this.settings.filterQuery) {
         this.setMessage(`No notes matching filter. ${totalDue} other notes are due.`);
       } else {
-        this.setMessage('All done for now!');
+        const stats = getQueueStats(
+          this.dv,
+          this.settings.ignoreFolderPath,
+          undefined,
+          this.settings.filterQuery || undefined,
+        );
+        const parts: string[] = [];
+        if (stats.buried > 0) {
+          parts.push(`${stats.buried} buried`);
+        }
+        if (stats.suspended > 0) {
+          parts.push(`${stats.suspended} suspended`);
+        }
+        if (stats.notDue > 0) {
+          parts.push(`${stats.notDue} not yet due`);
+        }
+        let message = 'All done for now!';
+        if (parts.length > 0) {
+          message += `\n${parts.join(' · ')}`;
+        }
+        this.setMessage(message);
       }
       this.currentChoices = [];
       this.currentFile = undefined;
+      this.currentRepetition = undefined;
       this.markdownContainer = undefined;
       this.refreshFilterUI();
       this.buttonsContainer.createEl('button', {
@@ -353,8 +444,10 @@ class RepeatView extends ItemView {
     }
     const file = matchingMarkdowns[0];
     this.currentFile = file;
+    this.currentRepetition = page.repetition as Repetition;
 
     choices.forEach(choice => this.addRepeatButton(choice, file));
+    this.addQueueButtons();
 
     renderTitleElement(
       this.previewContainer,
@@ -396,8 +489,15 @@ class RepeatView extends ItemView {
     this.messageContainer.style.display = 'none';
     this.previewContainer = this.scrollContainer.createEl('div', { cls: 'repeat-embedded_note' });
     this.buttonsContainer = this.layoutContainer.createEl('div', { cls: 'repeat-buttons' });
+    this.ratingsContainer = this.buttonsContainer.createEl('div', {
+      cls: 'repeat-buttons-ratings',
+    });
+    this.queueButtonsContainer = this.buttonsContainer.createEl('div', {
+      cls: 'repeat-buttons-queue',
+    });
     this.currentDueFilePath = undefined;
     this.currentFile = undefined;
+    this.currentRepetition = undefined;
     this.currentChoices = [];
     this.markdownContainer = undefined;
   }
@@ -697,7 +797,28 @@ class RepeatView extends ItemView {
 
   setMessage(message: string) {
     this.messageContainer.style.display = 'block';
-    this.messageContainer.setText(message);
+    this.messageContainer.empty();
+    message.split('\n').forEach((line) => {
+      this.messageContainer.createEl('div', { text: line });
+    });
+  }
+
+  addQueueButtons() {
+    this.queueButtonsContainer.empty();
+    ([
+      ['Bury (-)', 'bury'],
+      ['Suspend (@)', 'suspend'],
+      ['Forget', 'forget'],
+    ] as const).forEach(([label, action]) => {
+      this.queueButtonsContainer.createEl('button', {
+        text: label,
+        cls: action === 'forget'
+          ? 'repeat-queue-button repeat-queue-button-danger'
+          : 'repeat-queue-button',
+      }, (buttonElement) => {
+        buttonElement.onclick = () => this.requestQueueAction(action);
+      });
+    });
   }
 
   async addRepeatButton(
@@ -710,7 +831,7 @@ class RepeatView extends ItemView {
     if (ratingClass) {
       buttonClasses.push(ratingClass);
     }
-    return this.buttonsContainer.createEl('button', {
+    return this.ratingsContainer.createEl('button', {
         text: choice.text,
         cls: buttonClasses.join(' '),
       },

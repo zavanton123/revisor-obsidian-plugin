@@ -13,6 +13,8 @@ export const FSRS_FRONTMATTER_FIELDS = [
   'hidden',
   'repeat',
   'review_time_of_day',
+  'revisor_suspended',
+  'revisor_buried_until',
 ];
 
 function roundNumber(value: number, decimals: number): number {
@@ -54,6 +56,8 @@ export function serializeRepetition(repetition: Repetition) {
     due_at: repetition.repeatDueAt.toISO() || undefined,
     review_time_of_day: undefined,
     hidden: undefined,
+    revisor_suspended: repetition.suspended ? 'true' : undefined,
+    revisor_buried_until: repetition.buriedUntil?.toISO() || undefined,
   };
   if (repetition.fsrs) {
     serialized.fsrs = serializeFsrsState(repetition.fsrs);
@@ -61,7 +65,32 @@ export function serializeRepetition(repetition: Repetition) {
     serialized.fsrs = undefined;
   }
   FSRS_FRONTMATTER_FIELDS.forEach((field) => {
-    if (field !== 'fsrs' && field !== 'hidden' && field !== 'repeat' && field !== 'review_time_of_day') {
+    if (field !== 'fsrs'
+      && field !== 'hidden'
+      && field !== 'repeat'
+      && field !== 'review_time_of_day'
+      && field !== 'revisor_suspended'
+      && field !== 'revisor_buried_until') {
+      serialized[field] = undefined;
+    }
+  });
+  return serialized;
+}
+
+export function serializeQueueMetadata(
+  fields: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  const serialized: Record<string, string | undefined> = {
+    repeat: undefined,
+    review_time_of_day: undefined,
+    hidden: undefined,
+    ...fields,
+  };
+  FSRS_FRONTMATTER_FIELDS.forEach((field) => {
+    if (!(field in fields)
+      && field !== 'hidden'
+      && field !== 'repeat'
+      && field !== 'review_time_of_day') {
       serialized[field] = undefined;
     }
   });

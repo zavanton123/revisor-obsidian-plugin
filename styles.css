@@ -36,38 +36,86 @@
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.repeat-buttons > button {
+.repeat-buttons-ratings > button {
   margin-top: 0;
   margin-left: 16px;
 }
 
-.repeat-buttons > button:first-child {
+.repeat-buttons-ratings > button:first-child {
   margin-left: 0;
 }
 
+.repeat-buttons-queue {
+  padding-top: 8px;
+  margin-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.repeat-buttons-queue > button {
+  margin-top: 0;
+  margin-left: 12px;
+}
+
+.repeat-buttons-queue > button:first-child {
+  margin-left: 0;
+}
+
+.repeat-queue-button {
+  background-color: var(--background-modifier-form-field);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--button-radius);
+  padding: 6px 14px;
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+
+.repeat-queue-button:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+.repeat-queue-button-danger {
+  color: var(--text-error);
+  border-color: var(--background-modifier-error-hover);
+}
+
+.repeat-message-stats {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
 .repeat-buttons > button.repeat-fsrs-again,
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-again {
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-again,
+.repeat-buttons-ratings > button.repeat-fsrs-again,
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons-ratings > button.repeat-fsrs-again {
   background-color: #c0392b !important;
   color: #fff !important;
   border-color: #c0392b !important;
 }
 
 .repeat-buttons > button.repeat-fsrs-hard,
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-hard {
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-hard,
+.repeat-buttons-ratings > button.repeat-fsrs-hard,
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons-ratings > button.repeat-fsrs-hard {
   background-color: #e67e22 !important;
   color: #fff !important;
   border-color: #e67e22 !important;
 }
 
 .repeat-buttons > button.repeat-fsrs-good,
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-good {
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-good,
+.repeat-buttons-ratings > button.repeat-fsrs-good,
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons-ratings > button.repeat-fsrs-good {
   background-color: #27ae60 !important;
   color: #fff !important;
   border-color: #27ae60 !important;
 }
 
 .repeat-buttons > button.repeat-fsrs-easy,
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-easy {
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-easy,
+.repeat-buttons-ratings > button.repeat-fsrs-easy,
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons-ratings > button.repeat-fsrs-easy {
   background-color: #2980b9 !important;
   color: #fff !important;
   border-color: #2980b9 !important;
@@ -76,7 +124,11 @@
 .repeat-buttons > button.repeat-fsrs-again:hover,
 .repeat-buttons > button.repeat-fsrs-hard:hover,
 .repeat-buttons > button.repeat-fsrs-good:hover,
-.repeat-buttons > button.repeat-fsrs-easy:hover {
+.repeat-buttons > button.repeat-fsrs-easy:hover,
+.repeat-buttons-ratings > button.repeat-fsrs-again:hover,
+.repeat-buttons-ratings > button.repeat-fsrs-hard:hover,
+.repeat-buttons-ratings > button.repeat-fsrs-good:hover,
+.repeat-buttons-ratings > button.repeat-fsrs-easy:hover {
   filter: brightness(1.1);
 }
 
@@ -86,13 +138,15 @@
     padding: 12px;
   }
 
-  .repeat-buttons > button {
+  .repeat-buttons-ratings > button,
+  .repeat-buttons-queue > button {
     width: 100%;
     margin-left: 0;
     margin-top: 8px;
   }
 
-  .repeat-buttons > button:first-child {
+  .repeat-buttons-ratings > button:first-child,
+  .repeat-buttons-queue > button:first-child {
     margin-top: 0;
   }
 

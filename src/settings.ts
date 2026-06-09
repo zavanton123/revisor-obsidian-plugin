@@ -18,6 +18,9 @@ export interface RepeatPluginSettings {
   fsrsLearningSteps: string;
   fsrsRelearningSteps: string;
   fsrsWeights: number[] | null;
+  dayStartsAt: string;
+  confirmForget: boolean;
+  forgetResetsCounts: boolean;
 }
 
 export const DEFAULT_SETTINGS: RepeatPluginSettings = {
@@ -33,6 +36,9 @@ export const DEFAULT_SETTINGS: RepeatPluginSettings = {
   fsrsLearningSteps: '1m, 10m',
   fsrsRelearningSteps: '10m',
   fsrsWeights: null,
+  dayStartsAt: '06:00',
+  confirmForget: true,
+  forgetResetsCounts: true,
 };
 
 export const DEFAULT_REPEAT: Repeat = {
