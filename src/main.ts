@@ -448,6 +448,32 @@ class RepeatPluginSettingTab extends PluginSettingTab {
           }));
 
       new Setting(containerEl)
+        .setName('Max new notes per day')
+        .setDesc('Limit how many new notes are introduced each day. Set to 0 for unlimited.')
+        .addText(component => component
+          .setValue(String(this.plugin.settings.maxNewPerDay))
+          .onChange(async (value) => {
+            const parsed = parseInt(value, 10);
+            if (!isNaN(parsed) && parsed >= 0) {
+              this.plugin.settings.maxNewPerDay = parsed;
+              await this.plugin.saveSettings();
+            }
+          }));
+
+      new Setting(containerEl)
+        .setName('Max reviews per day')
+        .setDesc('Limit how many review notes are shown each day. Set to 0 for unlimited.')
+        .addText(component => component
+          .setValue(String(this.plugin.settings.maxReviewsPerDay))
+          .onChange(async (value) => {
+            const parsed = parseInt(value, 10);
+            if (!isNaN(parsed) && parsed >= 0) {
+              this.plugin.settings.maxReviewsPerDay = parsed;
+              await this.plugin.saveSettings();
+            }
+          }));
+
+      new Setting(containerEl)
         .setName('Confirm forget')
         .setDesc('Show a confirmation dialog before resetting FSRS progress.')
         .addToggle(component => component
