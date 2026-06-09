@@ -226,9 +226,9 @@ export default class RepeatPlugin extends Plugin {
     });
 
     ([
-      ['bury', 'Bury note'],
-      ['suspend', 'Suspend note'],
-      ['forget', 'Forget note'],
+      ['bury', 'Bury'],
+      ['suspend', 'Suspend'],
+      ['forget', 'Forget'],
     ] as const).forEach(([action, name]) => {
       this.addCommand({
         id: `revisor-${action}-note`,

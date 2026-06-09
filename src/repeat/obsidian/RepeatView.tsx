@@ -63,8 +63,6 @@ export interface RepeatViewPluginHost {
 
 class RepeatView extends ItemView {
   buttonsContainer: HTMLElement;
-  ratingsContainer: HTMLElement;
-  queueButtonsContainer: HTMLElement;
   component: Component;
   currentChoices: RepeatChoice[] = [];
   currentDueFilePath: string | undefined;
@@ -110,7 +108,6 @@ class RepeatView extends ItemView {
     this.applyQueueAction = this.applyQueueAction.bind(this);
     this.applyRating = this.applyRating.bind(this);
     this.requestQueueAction = this.requestQueueAction.bind(this);
-    this.addQueueButtons = this.addQueueButtons.bind(this);
     this.disableExternalHandlers = this.disableExternalHandlers.bind(this);
     this.enableExternalHandlers = this.enableExternalHandlers.bind(this);
     this.handleExternalModifyOrDelete = debounce(
@@ -232,27 +229,6 @@ class RepeatView extends ItemView {
       event.preventDefault();
       event.stopPropagation();
       this.applyRating(rating);
-      return;
-    }
-
-    if (event.key === '-') {
-      event.preventDefault();
-      event.stopPropagation();
-      this.requestQueueAction('bury');
-      return;
-    }
-
-    if (event.key === '@') {
-      event.preventDefault();
-      event.stopPropagation();
-      this.requestQueueAction('suspend');
-      return;
-    }
-
-    if (event.key === 'Backspace' && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      event.stopPropagation();
-      this.requestQueueAction('forget');
     }
   }
 
@@ -447,7 +423,6 @@ class RepeatView extends ItemView {
     this.currentRepetition = page.repetition as Repetition;
 
     choices.forEach(choice => this.addRepeatButton(choice, file));
-    this.addQueueButtons();
 
     renderTitleElement(
       this.previewContainer,
@@ -489,12 +464,6 @@ class RepeatView extends ItemView {
     this.messageContainer.style.display = 'none';
     this.previewContainer = this.scrollContainer.createEl('div', { cls: 'repeat-embedded_note' });
     this.buttonsContainer = this.layoutContainer.createEl('div', { cls: 'repeat-buttons' });
-    this.ratingsContainer = this.buttonsContainer.createEl('div', {
-      cls: 'repeat-buttons-ratings',
-    });
-    this.queueButtonsContainer = this.buttonsContainer.createEl('div', {
-      cls: 'repeat-buttons-queue',
-    });
     this.currentDueFilePath = undefined;
     this.currentFile = undefined;
     this.currentRepetition = undefined;
@@ -803,24 +772,6 @@ class RepeatView extends ItemView {
     });
   }
 
-  addQueueButtons() {
-    this.queueButtonsContainer.empty();
-    ([
-      ['Bury (-)', 'bury'],
-      ['Suspend (@)', 'suspend'],
-      ['Forget', 'forget'],
-    ] as const).forEach(([label, action]) => {
-      this.queueButtonsContainer.createEl('button', {
-        text: label,
-        cls: action === 'forget'
-          ? 'repeat-queue-button repeat-queue-button-danger'
-          : 'repeat-queue-button',
-      }, (buttonElement) => {
-        buttonElement.onclick = () => this.requestQueueAction(action);
-      });
-    });
-  }
-
   async addRepeatButton(
     choice: RepeatChoice,
     file: TFile,
@@ -831,7 +782,7 @@ class RepeatView extends ItemView {
     if (ratingClass) {
       buttonClasses.push(ratingClass);
     }
-    return this.ratingsContainer.createEl('button', {
+    return this.buttonsContainer.createEl('button', {
         text: choice.text,
         cls: buttonClasses.join(' '),
       },
