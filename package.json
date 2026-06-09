@@ -23,7 +23,7 @@
     "monthly",
     "yearly"
   ],
-  "author": "Anton Zaviyalov, Andre Perunicic",
+  "author": "Anton Zaviyalov",
   "license": "MIT",
   "devDependencies": {
     "@types/jest": "^29.0.3",
