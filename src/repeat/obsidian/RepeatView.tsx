@@ -12,13 +12,30 @@ import { Rating } from 'ts-fsrs';
 import { determineFrontmatterBounds, updateRepetitionMetadata } from '../../frontmatter';
 import { getRepeatChoices } from '../choices';
 import { RepeatChoice, Repetition } from '../repeatTypes';
-import { getNextDueNote, getNotesDue, getQueueStats, getTagsFromDueNotes, TagStats } from '../queries';
+import {
+  buildQueue,
+  formatQueueBreakdown,
+  getNotesDue,
+  getQueueBreakdownStats,
+  getQueueStats,
+  getTagsFromDueNotes,
+  TagStats,
+} from '../queries';
 import { buildQueueMetadata, QueueAction } from '../queueActions';
 import { serializeRepetition } from '../serializers';
 import { renderMarkdown, renderTitleElement } from '../../markdown';
 import { RepeatPluginSettings } from '../../settings';
 import TextInputModal from './TextInputModal';
 import ConfirmModal from './ConfirmModal';
+import { BuiltQueue, QueueBuildStats } from '../queueBuilder';
+import {
+  createSessionConfig,
+  endCustomStudy,
+  resetSessionCounters,
+  SessionStudyConfig,
+} from '../sessionStudy';
+import { getStudyCardKind } from '../studyCardKind';
+import { DailyStudyState } from '../dailyStudy';
 
 const MODIFY_DEBOUNCE_MS = 1 * 1000;
 const QUERY_DEBOUNCE_MS = 500;
@@ -59,6 +76,10 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 export interface RepeatViewPluginHost {
   setActiveRepeatView(view: RepeatView | undefined): void;
+  getDailyStudy(): DailyStudyState;
+  recordStudy(kind: ReturnType<typeof getStudyCardKind>): Promise<void>;
+  extendDailyLimits(newDelta: number, reviewDelta: number): Promise<void>;
+  makeQueueContext(session?: SessionStudyConfig): import('../queries').QueueQueryContext;
 }
 
 class RepeatView extends ItemView {
@@ -95,6 +116,16 @@ class RepeatView extends ItemView {
   handleQueryChange: ReturnType<typeof debounce>;
   filterExpanded: boolean;
   handleKeyDown: (event: KeyboardEvent) => void;
+
+  sessionConfig: SessionStudyConfig;
+  lastBuiltQueue: BuiltQueue | undefined;
+  queueModeSelect!: HTMLSelectElement;
+  customStudySelect!: HTMLSelectElement;
+  daysAheadInput!: HTMLInputElement;
+  sessionNewLimitInput!: HTMLInputElement;
+  sessionReviewLimitInput!: HTMLInputElement;
+  sessionStatusEl!: HTMLElement;
+  plugin: RepeatViewPluginHost;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -135,7 +166,14 @@ class RepeatView extends ItemView {
     this.handleDeleteSavedFilter = this.handleDeleteSavedFilter.bind(this);
     this.handleShowMoreTags = this.handleShowMoreTags.bind(this);
     this.toggleFilterDrawer = this.toggleFilterDrawer.bind(this);
+    this.handleSessionControlChange = this.handleSessionControlChange.bind(this);
+    this.handleResetSession = this.handleResetSession.bind(this);
+    this.handleEndCustomStudy = this.handleEndCustomStudy.bind(this);
+    this.handleExtendReviewLimit = this.handleExtendReviewLimit.bind(this);
+    this.handleExtendNewLimit = this.handleExtendNewLimit.bind(this);
     this.filterExpanded = false;
+    this.sessionConfig = createSessionConfig();
+    this.lastBuiltQueue = undefined;
 
     this.component = new Component();
 
@@ -143,6 +181,7 @@ class RepeatView extends ItemView {
     this.settings = settings;
     this.saveSettings = saveSettings;
     this.pluginHost = pluginHost;
+    this.plugin = pluginHost;
     this.availableTags = [];
     this.displayedTagCount = 6;
 
@@ -236,6 +275,152 @@ class RepeatView extends ItemView {
     return !!this.currentFile && !!this.currentRepetition;
   }
 
+  applySessionConfig(overrides: Partial<SessionStudyConfig>) {
+    this.sessionConfig = createSessionConfig({
+      ...this.sessionConfig,
+      ...overrides,
+      sessionNewStudied: overrides.sessionNewStudied ?? this.sessionConfig.sessionNewStudied,
+      sessionReviewStudied: overrides.sessionReviewStudied ?? this.sessionConfig.sessionReviewStudied,
+    });
+    if (this.queueModeSelect) {
+      this.syncSessionControlsFromConfig();
+    }
+    void this.setPage();
+  }
+
+  resetSession() {
+    this.sessionConfig = resetSessionCounters(this.sessionConfig);
+    this.syncSessionControlsFromConfig();
+    void this.setPage();
+  }
+
+  refreshAfterLimitChange() {
+    void this.setPage();
+  }
+
+  getQueueContext() {
+    return this.plugin.makeQueueContext(this.sessionConfig);
+  }
+
+  buildCurrentQueue(): BuiltQueue {
+    return buildQueue(
+      this.dv,
+      this.settings.ignoreFolderPath,
+      this.settings.filterQuery || undefined,
+      this.getQueueContext(),
+    );
+  }
+
+  syncSessionControlsFromConfig() {
+    if (!this.queueModeSelect) {
+      return;
+    }
+    this.queueModeSelect.value = this.sessionConfig.queueMode;
+    this.customStudySelect.value = this.sessionConfig.customStudy?.kind || '';
+    this.daysAheadInput.value = String(this.sessionConfig.customStudy?.daysAhead ?? 7);
+    this.sessionNewLimitInput.value = this.sessionConfig.sessionNewLimit
+      ? String(this.sessionConfig.sessionNewLimit)
+      : '';
+    this.sessionReviewLimitInput.value = this.sessionConfig.sessionReviewLimit
+      ? String(this.sessionConfig.sessionReviewLimit)
+      : '';
+    this.daysAheadInput.parentElement!.style.display =
+      this.sessionConfig.customStudy?.kind === 'review-ahead' ? 'flex' : 'none';
+    this.updateSessionStatus();
+  }
+
+  updateSessionStatus() {
+    if (!this.sessionStatusEl) {
+      return;
+    }
+    const daily = this.plugin.getDailyStudy();
+    const parts: string[] = [];
+    if (this.settings.maxReviewsPerDay > 0) {
+      parts.push(`Reviews today: ${daily.reviewStudied}/${this.settings.maxReviewsPerDay + daily.extendReview}`);
+    }
+    if (this.settings.maxNewPerDay > 0) {
+      parts.push(`New today: ${daily.newStudied}/${this.settings.maxNewPerDay + daily.extendNew}`);
+    }
+    if (this.sessionConfig.sessionReviewLimit > 0) {
+      parts.push(`Session reviews: ${this.sessionConfig.sessionReviewStudied}/${this.sessionConfig.sessionReviewLimit}`);
+    }
+    if (this.sessionConfig.sessionNewLimit > 0) {
+      parts.push(`Session new: ${this.sessionConfig.sessionNewStudied}/${this.sessionConfig.sessionNewLimit}`);
+    }
+    if (this.sessionConfig.customStudy) {
+      parts.push(`Custom: ${this.sessionConfig.customStudy.kind}`);
+    } else if (this.sessionConfig.queueMode !== 'normal') {
+      parts.push(`Mode: ${this.sessionConfig.queueMode}`);
+    }
+    this.sessionStatusEl.textContent = parts.join(' · ') || 'Normal study session';
+  }
+
+  handleSessionControlChange() {
+    const customKind = this.customStudySelect.value;
+    this.sessionConfig = createSessionConfig({
+      ...this.sessionConfig,
+      queueMode: this.queueModeSelect.value as SessionStudyConfig['queueMode'],
+      customStudy: customKind
+        ? {
+            kind: customKind as NonNullable<SessionStudyConfig['customStudy']>['kind'],
+            daysAhead: parseInt(this.daysAheadInput.value, 10) || 7,
+          }
+        : undefined,
+      sessionNewLimit: parseInt(this.sessionNewLimitInput.value, 10) || 0,
+      sessionReviewLimit: parseInt(this.sessionReviewLimitInput.value, 10) || 0,
+    });
+    this.syncSessionControlsFromConfig();
+    this.buttonsContainer.empty();
+    this.previewContainer.empty();
+    void this.setPage();
+  }
+
+  handleResetSession() {
+    this.resetSession();
+  }
+
+  handleEndCustomStudy() {
+    this.sessionConfig = endCustomStudy(this.sessionConfig);
+    this.syncSessionControlsFromConfig();
+    this.buttonsContainer.empty();
+    this.previewContainer.empty();
+    void this.setPage();
+  }
+
+  handleExtendReviewLimit() {
+    const modal = new TextInputModal(
+      this.app,
+      'Extend review limit',
+      'Increase by',
+      '10',
+      async (value) => {
+        if (!value) return;
+        const delta = parseInt(value, 10);
+        if (Number.isFinite(delta) && delta > 0) {
+          await this.plugin.extendDailyLimits(0, delta);
+        }
+      },
+    );
+    modal.open();
+  }
+
+  handleExtendNewLimit() {
+    const modal = new TextInputModal(
+      this.app,
+      'Extend new limit',
+      'Increase by',
+      '5',
+      async (value) => {
+        if (!value) return;
+        const delta = parseInt(value, 10);
+        if (Number.isFinite(delta) && delta > 0) {
+          await this.plugin.extendDailyLimits(delta, 0);
+        }
+      },
+    );
+    modal.open();
+  }
+
   requestQueueAction(action: QueueAction) {
     if (!this.currentFile || !this.currentRepetition) {
       return;
@@ -288,6 +473,9 @@ class RepeatView extends ItemView {
   }
 
   async applyChoice(choice: RepeatChoice, file: TFile) {
+    const studyKind = this.currentRepetition
+      ? getStudyCardKind(this.currentRepetition)
+      : undefined;
     this.resetView();
     const markdown = await this.app.vault.read(file);
     const newMarkdown = updateRepetitionMetadata(
@@ -295,6 +483,20 @@ class RepeatView extends ItemView {
     this.currentDueFilePath = file.path;
     await this.app.vault.modify(file, newMarkdown);
     await this.promiseMetadataChangeOrTimeOut();
+    if (studyKind) {
+      await this.plugin.recordStudy(studyKind);
+      if (studyKind === 'new') {
+        this.sessionConfig = {
+          ...this.sessionConfig,
+          sessionNewStudied: this.sessionConfig.sessionNewStudied + 1,
+        };
+      } else {
+        this.sessionConfig = {
+          ...this.sessionConfig,
+          sessionReviewStudied: this.sessionConfig.sessionReviewStudied + 1,
+        };
+      }
+    }
     this.setPage();
   }
 
@@ -347,72 +549,126 @@ class RepeatView extends ItemView {
     }
   }
 
+  renderEmptyStateActions(stats: QueueBuildStats) {
+    const row = this.messageContainer.createEl('div', { cls: 'repeat-empty-actions' });
+    if (stats.blockedByDailyLimit) {
+      row.createEl('button', { text: 'Extend +10 reviews' })
+        .addEventListener('click', this.handleExtendReviewLimit);
+      row.createEl('button', { text: 'Extend +5 new' })
+        .addEventListener('click', this.handleExtendNewLimit);
+    }
+    if (stats.blockedBySessionLimit) {
+      row.createEl('button', { text: 'Reset session' })
+        .addEventListener('click', this.handleResetSession);
+    }
+    if (this.sessionConfig.customStudy) {
+      row.createEl('button', { text: 'End custom study' })
+        .addEventListener('click', this.handleEndCustomStudy);
+    }
+    row.createEl('button', { text: 'Refresh' })
+      .addEventListener('click', () => {
+        this.resetView();
+        void this.setPage();
+      });
+  }
+
+  buildEmptyStateMessage(
+    built: BuiltQueue,
+    totalDueUnfiltered: number,
+  ): string {
+    const stats = built.stats;
+    const daily = this.plugin.getDailyStudy();
+
+    if (totalDueUnfiltered > 0 && this.settings.filterQuery) {
+      return `No notes matching filter. ${totalDueUnfiltered} other notes are due.`;
+    }
+
+    if (stats.blockedByCustomStudy) {
+      return 'No notes match this custom study.';
+    }
+
+    if (stats.blockedByQueueMode) {
+      return `No notes match queue mode "${this.sessionConfig.queueMode}".`;
+    }
+
+    if (stats.blockedBySessionLimit) {
+      return 'Session limit reached.\nReset the session or raise session caps to continue.';
+    }
+
+    if (stats.blockedByDailyLimit) {
+      const lines = ['Daily limit reached.'];
+      if (this.settings.maxReviewsPerDay > 0) {
+        lines.push(`Today: ${daily.reviewStudied}/${this.settings.maxReviewsPerDay + daily.extendReview} reviews`);
+      }
+      if (this.settings.maxNewPerDay > 0) {
+        lines.push(`${daily.newStudied}/${this.settings.maxNewPerDay + daily.extendNew} new`);
+      }
+      const waiting = stats.limitedOutNew + stats.limitedOutReview;
+      if (waiting > 0) {
+        lines.push(`${waiting} notes still waiting.`);
+      }
+      return lines.join('\n');
+    }
+
+    const queueStats = getQueueStats(
+      this.dv,
+      this.settings.ignoreFolderPath,
+      undefined,
+      this.settings.filterQuery || undefined,
+    );
+    const parts: string[] = [];
+    if (queueStats.buried > 0) {
+      parts.push(`${queueStats.buried} buried`);
+    }
+    if (queueStats.suspended > 0) {
+      parts.push(`${queueStats.suspended} suspended`);
+    }
+    if (queueStats.notDue > 0) {
+      parts.push(`${queueStats.notDue} not yet due`);
+    }
+    let message = 'All done for now!';
+    if (parts.length > 0) {
+      message += `\n${parts.join(' · ')}`;
+    }
+    return message;
+  }
+
   async setPage() {
     await this.indexPromise;
     this.setMessage('');
     this.messageContainer.style.display = 'none';
+    this.buttonsContainer?.empty();
+    this.previewContainer?.empty();
 
-    const page = getNextDueNote(
+    const built = this.buildCurrentQueue();
+    this.lastBuiltQueue = built;
+    const nextNote = built.notes[0];
+    const totalDueUnfiltered = getNotesDue(
       this.dv,
       this.settings.ignoreFolderPath,
-      undefined,
-      this.settings.filterQuery || undefined);
-    if (!page) {
-      const totalDue = getNotesDue(
-        this.dv,
-        this.settings.ignoreFolderPath,
-      )?.length || 0;
+    )?.length || 0;
 
-      if (totalDue > 0 && this.settings.filterQuery) {
-        this.setMessage(`No notes matching filter. ${totalDue} other notes are due.`);
-      } else {
-        const stats = getQueueStats(
-          this.dv,
-          this.settings.ignoreFolderPath,
-          undefined,
-          this.settings.filterQuery || undefined,
-        );
-        const parts: string[] = [];
-        if (stats.buried > 0) {
-          parts.push(`${stats.buried} buried`);
-        }
-        if (stats.suspended > 0) {
-          parts.push(`${stats.suspended} suspended`);
-        }
-        if (stats.notDue > 0) {
-          parts.push(`${stats.notDue} not yet due`);
-        }
-        let message = 'All done for now!';
-        if (parts.length > 0) {
-          message += `\n${parts.join(' · ')}`;
-        }
-        this.setMessage(message);
-      }
+    if (!nextNote) {
+      this.setMessage(this.buildEmptyStateMessage(built, totalDueUnfiltered));
+      this.renderEmptyStateActions(built.stats);
       this.currentChoices = [];
       this.currentFile = undefined;
       this.currentRepetition = undefined;
       this.markdownContainer = undefined;
       this.refreshFilterUI();
-      this.buttonsContainer.createEl('button', {
-        text: 'Refresh',
-      },
-      (buttonElement) => {
-        buttonElement.onclick = () => {
-          this.resetView();
-          this.setPage();
-        }
-      });
       return;
     }
 
     this.refreshFilterUI();
-    const dueFilePath = (page?.file as any).path;
+    const dueFilePath = nextNote.filePath;
     this.currentDueFilePath = dueFilePath;
-    const choices = getRepeatChoices(page.repetition as any, this.settings);
+    const repetition = nextNote.repetition;
+    const treatAsDue = this.sessionConfig.customStudy?.kind === 'review-ahead';
+    const choices = getRepeatChoices(repetition, this.settings, { treatAsDue });
     this.currentChoices = choices;
     const matchingMarkdowns = this.app.vault.getMarkdownFiles()
       .filter((file) => file?.path === dueFilePath);
-    if (!matchingMarkdowns) {
+    if (!matchingMarkdowns.length) {
       this.setMessage(
         `Error: Could not find due note ${dueFilePath}. ` +
         'Reopen this view to retry.');
@@ -420,7 +676,7 @@ class RepeatView extends ItemView {
     }
     const file = matchingMarkdowns[0];
     this.currentFile = file;
-    this.currentRepetition = page.repetition as Repetition;
+    this.currentRepetition = repetition;
 
     choices.forEach(choice => this.addRepeatButton(choice, file));
 
@@ -543,6 +799,69 @@ class RepeatView extends ItemView {
       cls: 'repeat-filter-error'
     });
     this.filterErrorEl.style.display = 'none';
+
+    this.filterContent.createEl('div', {
+      cls: 'repeat-filter-section-title',
+      text: 'Study session',
+    });
+
+    const sessionRow = this.filterContent.createEl('div', { cls: 'repeat-filter-row' });
+    this.queueModeSelect = sessionRow.createEl('select', { cls: 'repeat-filter-dropdown' });
+    [
+      ['normal', 'Normal'],
+      ['new-only', 'New only'],
+      ['reviews-only', 'Reviews only'],
+    ].forEach(([value, label]) => {
+      this.queueModeSelect.createEl('option', { text: label, attr: { value } });
+    });
+    this.queueModeSelect.addEventListener('change', this.handleSessionControlChange);
+
+    this.customStudySelect = sessionRow.createEl('select', { cls: 'repeat-filter-dropdown' });
+    [
+      ['', 'Custom study…'],
+      ['review-ahead', 'Review ahead'],
+      ['lapses-only', 'Lapses only'],
+      ['never-reviewed', 'Never reviewed'],
+    ].forEach(([value, label]) => {
+      this.customStudySelect.createEl('option', { text: label, attr: { value } });
+    });
+    this.customStudySelect.addEventListener('change', this.handleSessionControlChange);
+
+    const daysAheadRow = this.filterContent.createEl('div', {
+      cls: 'repeat-filter-row',
+    });
+    daysAheadRow.createEl('span', { text: 'Days ahead:' });
+    this.daysAheadInput = daysAheadRow.createEl('input', {
+      cls: 'repeat-filter-query-input',
+      attr: { type: 'number', min: '1', value: '7' },
+    });
+    this.daysAheadInput.addEventListener('change', this.handleSessionControlChange);
+    daysAheadRow.style.display = 'none';
+
+    const sessionLimitRow = this.filterContent.createEl('div', { cls: 'repeat-filter-row' });
+    sessionLimitRow.createEl('span', { text: 'Session new cap:' });
+    this.sessionNewLimitInput = sessionLimitRow.createEl('input', {
+      cls: 'repeat-filter-query-input',
+      attr: { type: 'number', min: '0', placeholder: '0 = unlimited' },
+    });
+    sessionLimitRow.createEl('span', { text: 'Review cap:' });
+    this.sessionReviewLimitInput = sessionLimitRow.createEl('input', {
+      cls: 'repeat-filter-query-input',
+      attr: { type: 'number', min: '0', placeholder: '0 = unlimited' },
+    });
+    this.sessionNewLimitInput.addEventListener('change', this.handleSessionControlChange);
+    this.sessionReviewLimitInput.addEventListener('change', this.handleSessionControlChange);
+
+    const sessionActionsRow = this.filterContent.createEl('div', { cls: 'repeat-filter-row' });
+    sessionActionsRow.createEl('button', { cls: 'repeat-filter-btn', text: 'Reset session' })
+      .addEventListener('click', this.handleResetSession);
+    sessionActionsRow.createEl('button', { cls: 'repeat-filter-btn', text: 'End custom study' })
+      .addEventListener('click', this.handleEndCustomStudy);
+
+    this.sessionStatusEl = this.filterContent.createEl('div', {
+      cls: 'repeat-filter-session-status',
+    });
+    this.syncSessionControlsFromConfig();
   }
 
   toggleFilterDrawer() {
@@ -584,6 +903,7 @@ class RepeatView extends ItemView {
       this.dv,
       this.settings.ignoreFolderPath,
       undefined,
+      this.getQueueContext(),
     ) || [];
 
     this.displayedTagCount = 6;
@@ -620,41 +940,58 @@ class RepeatView extends ItemView {
 
   updateFilterCount() {
     const filterQuery = this.settings.filterQuery;
+    const context = this.getQueueContext();
 
-    const totalCount = getNotesDue(
+    const totalBuilt = buildQueue(
       this.dv,
       this.settings.ignoreFolderPath,
       undefined,
-    )?.length || 0;
+      context,
+    );
+    const totalCount = totalBuilt.notes.length;
+
+    const formatCount = (count: number) => {
+      if (this.settings.showQueueBreakdown) {
+        const breakdown = getQueueBreakdownStats(
+          this.dv,
+          this.settings.ignoreFolderPath,
+          filterQuery || undefined,
+        );
+        return formatQueueBreakdown(breakdown);
+      }
+      return `${count} notes due`;
+    };
 
     if (filterQuery) {
       try {
-        const filteredCount = getNotesDue(
+        const filteredBuilt = buildQueue(
           this.dv,
           this.settings.ignoreFolderPath,
-          undefined,
-          filterQuery
-        )?.length || 0;
+          filterQuery,
+          context,
+        );
+        const filteredCount = filteredBuilt.notes.length;
 
         const matchingFilter = this.settings.savedFilters.find(
           f => f.query === filterQuery
         );
 
         if (matchingFilter) {
-          this.filterCountEl.textContent = `${matchingFilter.name}: ${filteredCount} matching, ${totalCount} total`;
+          this.filterCountEl.textContent = `${matchingFilter.name}: ${filteredCount} in queue, ${totalCount} total`;
         } else {
-          this.filterCountEl.textContent = `${filteredCount} matching, ${totalCount} total`;
+          this.filterCountEl.textContent = `${filteredCount} in queue, ${totalCount} total`;
         }
         this.filterErrorEl.style.display = 'none';
       } catch (e) {
-        this.filterCountEl.textContent = `${totalCount} notes due`;
+        this.filterCountEl.textContent = formatCount(totalCount);
         this.filterErrorEl.textContent = `Invalid filter: ${e.message || 'Check your query syntax'}`;
         this.filterErrorEl.style.display = 'block';
       }
     } else {
-      this.filterCountEl.textContent = `${totalCount} notes due`;
+      this.filterCountEl.textContent = formatCount(totalCount);
       this.filterErrorEl.style.display = 'none';
     }
+    this.updateSessionStatus();
   }
 
   doHandleQueryChange() {

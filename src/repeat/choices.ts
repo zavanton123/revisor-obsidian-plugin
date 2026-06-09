@@ -24,9 +24,10 @@ function getFsrsRepeatChoices(
   repetition: Repetition,
   now: DateTime,
   settings: RepeatPluginSettings,
+  treatAsDue = false,
 ): RepeatChoice[] {
   const { repeatDueAt } = repetition;
-  if ((repeatDueAt > now) || !repeatDueAt) {
+  if (!treatAsDue && (repeatDueAt > now || !repeatDueAt)) {
     return [];
   }
 
@@ -53,13 +54,19 @@ function getFsrsRepeatChoices(
 
 export function getRepeatChoices(
   repetition: Repetition | undefined | null,
-  settings: RepeatPluginSettings
+  settings: RepeatPluginSettings,
+  options?: { treatAsDue?: boolean },
 ): RepeatChoice[] {
   if (!repetition) {
     return [];
   }
   const now = DateTime.now();
-  return getFsrsRepeatChoices(repetition, now, settings);
+  return getFsrsRepeatChoices(
+    repetition,
+    now,
+    settings,
+    options?.treatAsDue ?? false,
+  );
 }
 
 export function getRepeatChoiceForRating(
