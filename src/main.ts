@@ -225,6 +225,20 @@ export default class RepeatPlugin extends Plugin {
       });
     });
 
+    this.addCommand({
+      id: 'revisor-undo-review',
+      name: 'Revisor: Undo last review',
+      checkCallback: (checking: boolean) => {
+        if (!this.activeRepeatView?.canUndo()) {
+          return false;
+        }
+        if (!checking) {
+          void this.activeRepeatView.undoLastReview();
+        }
+        return true;
+      },
+    });
+
     ([
       ['bury', 'Bury'],
       ['suspend', 'Suspend'],

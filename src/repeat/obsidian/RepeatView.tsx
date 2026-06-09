@@ -2,6 +2,7 @@ import {
   Component,
   debounce,
   ItemView,
+  Notice,
   setIcon,
   WorkspaceLeaf,
   TFile,
@@ -11,14 +12,20 @@ import { Rating } from 'ts-fsrs';
 
 import { determineFrontmatterBounds, updateRepetitionMetadata } from '../../frontmatter';
 import { getRepeatChoices } from '../choices';
+import { parseRepetition } from '../parsers';
 import { RepeatChoice, Repetition } from '../repeatTypes';
 import { getNextDueNote, getNotesDue, getQueueStats, getTagsFromDueNotes, TagStats } from '../queries';
 import { buildQueueMetadata, QueueAction } from '../queueActions';
 import { serializeRepetition } from '../serializers';
+import { buildUndoEntry, ReviewUndoStack } from '../undoStack';
 import { renderMarkdown, renderTitleElement } from '../../markdown';
 import { RepeatPluginSettings } from '../../settings';
 import TextInputModal from './TextInputModal';
 import ConfirmModal from './ConfirmModal';
+
+interface SetPageOptions {
+  forceFilePath?: string;
+}
 
 const MODIFY_DEBOUNCE_MS = 1 * 1000;
 const QUERY_DEBOUNCE_MS = 500;
@@ -95,6 +102,7 @@ class RepeatView extends ItemView {
   handleQueryChange: ReturnType<typeof debounce>;
   filterExpanded: boolean;
   handleKeyDown: (event: KeyboardEvent) => void;
+  undoStack: ReviewUndoStack;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -135,7 +143,10 @@ class RepeatView extends ItemView {
     this.handleDeleteSavedFilter = this.handleDeleteSavedFilter.bind(this);
     this.handleShowMoreTags = this.handleShowMoreTags.bind(this);
     this.toggleFilterDrawer = this.toggleFilterDrawer.bind(this);
+    this.captureUndoSnapshot = this.captureUndoSnapshot.bind(this);
+    this.undoLastReview = this.undoLastReview.bind(this);
     this.filterExpanded = false;
+    this.undoStack = new ReviewUndoStack();
 
     this.component = new Component();
 
@@ -189,6 +200,7 @@ class RepeatView extends ItemView {
   }
 
   async onClose() {
+    this.undoStack.clear();
     this.pluginHost.setActiveRepeatView(undefined);
     this.disableExternalHandlers();
   }
@@ -199,6 +211,13 @@ class RepeatView extends ItemView {
 
   handleKeyDownImpl(event: KeyboardEvent) {
     if (!this.isActiveView() || isTypingTarget(event.target)) {
+      return;
+    }
+
+    if (event.key === 'u' || event.key === 'U') {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.undoLastReview();
       return;
     }
 
@@ -236,6 +255,60 @@ class RepeatView extends ItemView {
     return !!this.currentFile && !!this.currentRepetition;
   }
 
+  canUndo(): boolean {
+    return this.undoStack.canUndo();
+  }
+
+  getRepetitionForFile(file: TFile): Repetition | undefined {
+    const cache = this.app.metadataCache.getFileCache(file);
+    return parseRepetition(cache?.frontmatter || {});
+  }
+
+  captureUndoSnapshot(
+    action: 'rating' | QueueAction,
+    rating?: Rating,
+  ) {
+    if (!this.currentFile || !this.currentRepetition) {
+      return;
+    }
+    this.undoStack.push(buildUndoEntry(
+      this.currentFile.path,
+      this.currentRepetition,
+      action,
+      rating,
+    ));
+  }
+
+  async undoLastReview(): Promise<boolean> {
+    const entry = this.undoStack.pop();
+    if (!entry) {
+      new Notice('Nothing to undo');
+      return false;
+    }
+
+    const file = this.app.vault.getAbstractFileByPath(entry.filePath);
+    if (!(file instanceof TFile)) {
+      new Notice('Could not undo: note not found');
+      return false;
+    }
+
+    try {
+      this.resetView();
+      const markdown = await this.app.vault.read(file);
+      const newMarkdown = updateRepetitionMetadata(markdown, entry.metadata);
+      this.currentDueFilePath = entry.filePath;
+      await this.app.vault.modify(file, newMarkdown);
+      await this.promiseMetadataChangeOrTimeOut();
+      await this.setPage({ forceFilePath: entry.filePath });
+      new Notice('Review undone');
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      new Notice(`Could not undo: ${message}`);
+      return false;
+    }
+  }
+
   requestQueueAction(action: QueueAction) {
     if (!this.currentFile || !this.currentRepetition) {
       return;
@@ -262,6 +335,7 @@ class RepeatView extends ItemView {
     if (!file || !repetition) {
       return;
     }
+    this.captureUndoSnapshot(action);
     const filePath = file.path;
     const metadata = buildQueueMetadata(action, repetition, this.settings);
     this.resetView();
@@ -288,6 +362,7 @@ class RepeatView extends ItemView {
   }
 
   async applyChoice(choice: RepeatChoice, file: TFile) {
+    this.captureUndoSnapshot('rating', choice.rating);
     this.resetView();
     const markdown = await this.app.vault.read(file);
     const newMarkdown = updateRepetitionMetadata(
@@ -347,17 +422,42 @@ class RepeatView extends ItemView {
     }
   }
 
-  async setPage() {
+  async setPage(options?: SetPageOptions) {
     await this.indexPromise;
     this.setMessage('');
     this.messageContainer.style.display = 'none';
 
-    const page = getNextDueNote(
-      this.dv,
-      this.settings.ignoreFolderPath,
-      undefined,
-      this.settings.filterQuery || undefined);
-    if (!page) {
+    let dueFilePath: string | undefined;
+    let repetition: Repetition | undefined;
+
+    if (options?.forceFilePath) {
+      const forcedFile = this.app.vault.getMarkdownFiles()
+        .find((file) => file.path === options.forceFilePath);
+      if (!forcedFile) {
+        this.setMessage(`Error: Could not find note ${options.forceFilePath}.`);
+        return;
+      }
+      repetition = this.getRepetitionForFile(forcedFile);
+      if (!repetition) {
+        this.setMessage(`Error: Note ${options.forceFilePath} is not a Revisor note.`);
+        return;
+      }
+      dueFilePath = forcedFile.path;
+    } else {
+      const page = getNextDueNote(
+        this.dv,
+        this.settings.ignoreFolderPath,
+        undefined,
+        this.settings.filterQuery || undefined);
+      if (!page) {
+        dueFilePath = undefined;
+      } else {
+        dueFilePath = (page.file as any).path;
+        repetition = page.repetition as Repetition;
+      }
+    }
+
+    if (!dueFilePath || !repetition) {
       const totalDue = getNotesDue(
         this.dv,
         this.settings.ignoreFolderPath,
@@ -406,13 +506,12 @@ class RepeatView extends ItemView {
     }
 
     this.refreshFilterUI();
-    const dueFilePath = (page?.file as any).path;
     this.currentDueFilePath = dueFilePath;
-    const choices = getRepeatChoices(page.repetition as any, this.settings);
+    const choices = getRepeatChoices(repetition, this.settings);
     this.currentChoices = choices;
     const matchingMarkdowns = this.app.vault.getMarkdownFiles()
       .filter((file) => file?.path === dueFilePath);
-    if (!matchingMarkdowns) {
+    if (!matchingMarkdowns.length) {
       this.setMessage(
         `Error: Could not find due note ${dueFilePath}. ` +
         'Reopen this view to retry.');
@@ -420,7 +519,7 @@ class RepeatView extends ItemView {
     }
     const file = matchingMarkdowns[0];
     this.currentFile = file;
-    this.currentRepetition = page.repetition as Repetition;
+    this.currentRepetition = repetition;
 
     choices.forEach(choice => this.addRepeatButton(choice, file));
 
