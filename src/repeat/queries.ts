@@ -3,7 +3,7 @@ import { Literal, DataviewApi, DataArray } from 'obsidian-dataview';
 
 import { parseRepetition } from './parsers';
 import { getQueueEligibility, isDueForReview } from './queueEligibility';
-import { QueueEligibility, Repetition } from './repeatTypes';
+import { QueueEligibility } from './repeatTypes';
 
 export interface TagStats {
   tag: string;
@@ -15,15 +15,6 @@ export interface QueueStats {
   buried: number;
   suspended: number;
   notDue: number;
-}
-
-export interface TodayReviewCounts {
-  newCount: number;
-  reviewCount: number;
-}
-
-function isSameDay(a: DateTime, b: DateTime): boolean {
-  return a.hasSame(b, 'day');
 }
 
 function mutateRevisorPages(
@@ -70,52 +61,15 @@ export function getNextDueNote(
   ignoreFolderPath: string,
   ignoreFilePath?: string | undefined,
   filterQuery?: string,
-  maxNewPerDay = 0,
-  maxReviewsPerDay = 0,
 ): Record<string, Literal> | undefined {
-  const dueNotes = getNotesDue(
+  const page = getNotesDue(
     dv,
     ignoreFolderPath,
     ignoreFilePath,
     filterQuery,
-  );
-  if (!dueNotes) { return; }
-
-  const todayCounts = getTodayReviewCounts(dv, ignoreFolderPath, filterQuery);
-
-  let remainingNew = maxNewPerDay > 0
-    ? Math.max(0, maxNewPerDay - todayCounts.newCount)
-    : Infinity;
-
-  let remainingReviews = maxReviewsPerDay > 0
-    ? Math.max(0, maxReviewsPerDay - todayCounts.reviewCount)
-    : Infinity;
-
-  for (const page of dueNotes.values()) {
-    const r = page.repetition as Repetition;
-
-    if (!r.fsrs) {
-      if (remainingNew <= 0) { continue; }
-      remainingNew--;
-      return page;
-    }
-
-    if (r.fsrs.state === 'new') {
-      if (remainingNew <= 0) { continue; }
-      remainingNew--;
-      return page;
-    }
-
-    if (r.fsrs.state === 'learning') {
-      return page;
-    }
-
-    if (remainingReviews <= 0) { continue; }
-    remainingReviews--;
-    return page;
-  }
-
-  return;
+  )?.first();
+  if (!page) { return; }
+  return page;
 }
 
 export function getQueueStats(
@@ -149,31 +103,6 @@ export function getQueueStats(
       }
     });
   return stats;
-}
-
-export function getTodayReviewCounts(
-  dv: DataviewApi | undefined,
-  ignoreFolderPath: string,
-  filterQuery?: string,
-): TodayReviewCounts {
-  const now = DateTime.now();
-  let newCount = 0;
-  let reviewCount = 0;
-
-  mutateRevisorPages(dv, ignoreFolderPath, undefined, filterQuery)
-    ?.forEach((page: any) => {
-      const r = page.repetition as Repetition;
-      if (!r.fsrs?.lastReview) { return; }
-      if (!isSameDay(r.fsrs.lastReview, now)) { return; }
-
-      if (r.fsrs.reps === 1) {
-        newCount++;
-      } else if (r.fsrs.state === 'review' || r.fsrs.state === 'relearning') {
-        reviewCount++;
-      }
-    });
-
-  return { newCount, reviewCount };
 }
 
 export function countByEligibility(

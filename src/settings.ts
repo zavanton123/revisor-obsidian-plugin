@@ -19,8 +19,6 @@ export interface RepeatPluginSettings {
   fsrsRelearningSteps: string;
   fsrsWeights: number[] | null;
   dayStartsAt: string;
-  maxNewPerDay: number;
-  maxReviewsPerDay: number;
   confirmForget: boolean;
   forgetResetsCounts: boolean;
 }
@@ -39,8 +37,6 @@ export const DEFAULT_SETTINGS: RepeatPluginSettings = {
   fsrsRelearningSteps: '10m',
   fsrsWeights: null,
   dayStartsAt: '06:00',
-  maxNewPerDay: 0,
-  maxReviewsPerDay: 0,
   confirmForget: true,
   forgetResetsCounts: true,
 };

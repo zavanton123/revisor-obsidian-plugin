@@ -14,7 +14,7 @@ import { determineFrontmatterBounds, updateRepetitionMetadata } from '../../fron
 import { getRepeatChoices } from '../choices';
 import { parseRepetition } from '../parsers';
 import { RepeatChoice, Repetition } from '../repeatTypes';
-import { getNextDueNote, getNotesDue, getQueueStats, getTagsFromDueNotes, getTodayReviewCounts, TagStats } from '../queries';
+import { getNextDueNote, getNotesDue, getQueueStats, getTagsFromDueNotes, TagStats } from '../queries';
 import { buildQueueMetadata, QueueAction } from '../queueActions';
 import { serializeRepetition } from '../serializers';
 import { buildUndoEntry, ReviewUndoStack } from '../undoStack';
@@ -448,10 +448,7 @@ class RepeatView extends ItemView {
         this.dv,
         this.settings.ignoreFolderPath,
         undefined,
-        this.settings.filterQuery || undefined,
-        this.settings.maxNewPerDay,
-        this.settings.maxReviewsPerDay,
-      );
+        this.settings.filterQuery || undefined);
       if (!page) {
         dueFilePath = undefined;
       } else {
@@ -466,63 +463,8 @@ class RepeatView extends ItemView {
         this.settings.ignoreFolderPath,
       )?.length || 0;
 
-      if (totalDue > 0) {
-        const hasNewLimit = this.settings.maxNewPerDay > 0;
-        const hasReviewLimit = this.settings.maxReviewsPerDay > 0;
-
-        if (hasNewLimit || hasReviewLimit) {
-          const counts = getTodayReviewCounts(
-            this.dv,
-            this.settings.ignoreFolderPath,
-            this.settings.filterQuery || undefined,
-          );
-
-          const newRemaining = hasNewLimit
-            ? Math.max(0, this.settings.maxNewPerDay - counts.newCount)
-            : undefined;
-          const reviewRemaining = hasReviewLimit
-            ? Math.max(0, this.settings.maxReviewsPerDay - counts.reviewCount)
-            : undefined;
-
-          if ((newRemaining === 0 && hasNewLimit) || (reviewRemaining === 0 && hasReviewLimit)) {
-            const parts: string[] = [];
-            if (hasNewLimit) {
-              parts.push(`${newRemaining} new remaining`);
-            }
-            if (hasReviewLimit) {
-              parts.push(`${reviewRemaining} reviews remaining`);
-            }
-            this.setMessage(`Daily limits reached.\n${parts.join(' · ')}\n${totalDue} notes still due.`);
-          } else if (this.settings.filterQuery) {
-            this.setMessage(`No notes matching filter. ${totalDue} other notes are due.`);
-          } else {
-            this.setMessage(`All done for now!\n${totalDue} notes are due but outside your study limits.`);
-          }
-        } else if (this.settings.filterQuery) {
-          this.setMessage(`No notes matching filter. ${totalDue} other notes are due.`);
-        } else {
-          const stats = getQueueStats(
-            this.dv,
-            this.settings.ignoreFolderPath,
-            undefined,
-            this.settings.filterQuery || undefined,
-          );
-          const parts: string[] = [];
-          if (stats.buried > 0) {
-            parts.push(`${stats.buried} buried`);
-          }
-          if (stats.suspended > 0) {
-            parts.push(`${stats.suspended} suspended`);
-          }
-          if (stats.notDue > 0) {
-            parts.push(`${stats.notDue} not yet due`);
-          }
-          let message = 'All done for now!';
-          if (parts.length > 0) {
-            message += `\n${parts.join(' · ')}`;
-          }
-          this.setMessage(message);
-        }
+      if (totalDue > 0 && this.settings.filterQuery) {
+        this.setMessage(`No notes matching filter. ${totalDue} other notes are due.`);
       } else {
         const stats = getQueueStats(
           this.dv,
