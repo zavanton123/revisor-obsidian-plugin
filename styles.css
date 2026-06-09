@@ -25,6 +25,9 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .repeat-buttons {
@@ -102,12 +105,14 @@
 }
 
 .repeat-embedded_note {
-  padding: 15px 30px 24px;
-  max-width: var(--file-line-width);
+  padding: 15px 24px 32px;
+  width: min(920px, 88%);
+  max-width: 920px;
   margin-left: auto;
   margin-right: auto;
   border: none;
   border-left: none;
+  box-sizing: border-box;
 }
 
 .repeat-note-content {
