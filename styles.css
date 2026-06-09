@@ -144,14 +144,17 @@
   font-size: 16px;
   border-radius: 4px;
   outline: none;
-  height: 39px;  /* Deduced experimentally. */
+  height: 39px; /* Deduced experimentally. */
 }
+
 .repeat-date_picker:hover {
   background-color: var(--background-modifier-form-field-highlighted);
 }
+
 .repeat-date_picker:focus {
   border-color: var(--interactive-accent);
 }
+
 .repeat-date_picker:::placeholder {
   color: var(--text-faint);
 }
