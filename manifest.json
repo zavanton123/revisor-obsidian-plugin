@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "minAppVersion": "1.1.0",
   "description": "Review notes using FSRS spaced repetition.",
-  "author": "Andre Perunicic",
-  "authorUrl": "https://github.com/prncc/obsidian-repeat-plugin/",
+  "author": "Anton Zaviyalov, Andre Perunicic",
+  "authorUrl": "https://github.com/zavanton123/revisor-obsidian-plugin",
   "isDesktopOnly": false
 }

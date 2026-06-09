@@ -34,7 +34,7 @@ All scheduling state lives in the note’s YAML frontmatter, so your vault stays
 
 ## Quick start
 
-1. Open any note and run **`Repeat this note`** from the command palette.  
+1. Open any note and run **`Repeat this note`** from the command palette.
    Revisor adds FSRS metadata to the note and makes it due immediately.
 2. Open the review pane via the **clock ribbon icon**, the status bar, or **`Review due notes`**.
 3. Reveal the note (**Space** or click), read it, then rate it with a button or keyboard shortcut.
@@ -145,7 +145,7 @@ Copy `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/plugin
 
 ## Credits
 
-Revisor is a fork/evolution of the [Obsidian Repeat plugin](https://github.com/prncc/obsidian-repeat-plugin) by Andre Perunicic, rewritten around **FSRS-only** scheduling.
+Revisor is maintained by **Anton Zaviyalov**. It is a fork/evolution of the [Obsidian Repeat plugin](https://github.com/prncc/obsidian-repeat-plugin), rewritten around **FSRS-only** scheduling.
 
 FSRS algorithm: [open-spaced-repetition](https://github.com/open-spaced-repetition) · TypeScript implementation: [`ts-fsrs`](https://github.com/open-spaced-repetition/ts-fsrs)
 
