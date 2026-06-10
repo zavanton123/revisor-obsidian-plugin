@@ -886,6 +886,9 @@ class RepeatView extends ItemView {
         cls: buttonClasses.join(' '),
       },
       (buttonElement) => {
+        if (choice.hint) {
+          buttonElement.setAttribute('title', choice.hint);
+        }
         if (ratingColor) {
           buttonElement.style.backgroundColor = ratingColor;
           buttonElement.style.borderColor = ratingColor;

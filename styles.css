@@ -42,6 +42,9 @@
 .repeat-buttons > button {
   margin-top: 0;
   margin-left: 16px;
+  min-width: 140px;
+  padding: 8px 24px;
+  font-size: 15px;
 }
 
 .repeat-buttons > button:first-child {
@@ -136,7 +139,7 @@
 }
 
 .repeat-markdown_blurred {
-  filter: blur(5px);
+  filter: blur(12px);
 }
 
 /* Transferred from Obsidian's input[] styles. */

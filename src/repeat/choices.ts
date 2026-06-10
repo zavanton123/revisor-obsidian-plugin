@@ -45,7 +45,8 @@ function getFsrsRepeatChoices(
     );
     return {
       rating,
-      text: `${FSRS_RATING_LABELS[rating]} — ${summarizeDueAt(nextRepetition.repeatDueAt, now)}`,
+      text: FSRS_RATING_LABELS[rating],
+      hint: summarizeDueAt(nextRepetition.repeatDueAt, now),
       nextRepetition,
     };
   });

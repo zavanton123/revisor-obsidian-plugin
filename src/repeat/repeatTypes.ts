@@ -38,4 +38,5 @@ export type RepeatChoice = {
   text: string,
   rating: Rating,
   nextRepetition: Repetition,
+  hint?: string,
 }

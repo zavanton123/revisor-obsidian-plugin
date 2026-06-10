@@ -21,6 +21,8 @@ export interface RepeatPluginSettings {
   dayStartsAt: string;
   confirmForget: boolean;
   forgetResetsCounts: boolean;
+  maxReviewsPerDay: number;
+  maxNewPerDay: number;
 }
 
 export const DEFAULT_SETTINGS: RepeatPluginSettings = {
@@ -39,6 +41,8 @@ export const DEFAULT_SETTINGS: RepeatPluginSettings = {
   dayStartsAt: '06:00',
   confirmForget: true,
   forgetResetsCounts: true,
+  maxReviewsPerDay: 0,
+  maxNewPerDay: 0,
 };
 
 export const DEFAULT_REPEAT: Repeat = {

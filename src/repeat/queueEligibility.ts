@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon';
 
-import { Repetition, QueueEligibility } from './repeatTypes';
+import { Repetition, QueueEligibility, FsrsStateName } from './repeatTypes';
 
 export function getQueueEligibility(
   repetition: Repetition | undefined,
@@ -26,4 +26,23 @@ export function isDueForReview(
   now: DateTime,
 ): boolean {
   return getQueueEligibility(repetition, now) === 'due';
+}
+
+function getFsrsState(repetition: Repetition): FsrsStateName | undefined {
+  return repetition.fsrs?.state;
+}
+
+export function isNewCard(repetition: Repetition): boolean {
+  const state = getFsrsState(repetition);
+  return state === 'new' || !state;
+}
+
+export function isGraduatedReview(repetition: Repetition): boolean {
+  const state = getFsrsState(repetition);
+  return state === 'review';
+}
+
+export function isIntradayLearning(repetition: Repetition): boolean {
+  const state = getFsrsState(repetition);
+  return state === 'learning' || state === 'relearning';
 }
