@@ -9,6 +9,7 @@ import {
 } from 'obsidian';
 import { getAPI, DataviewApi } from 'obsidian-dataview';
 import { Rating } from 'ts-fsrs';
+import { DateTime } from 'luxon';
 
 import { determineFrontmatterBounds, updateRepetitionMetadata } from '../../frontmatter';
 import { getRepeatChoices } from '../choices';
@@ -20,6 +21,7 @@ import { serializeRepetition } from '../serializers';
 import { buildUndoEntry, ReviewUndoStack } from '../undoStack';
 import { renderMarkdown, renderTitleElement } from '../../markdown';
 import { RepeatPluginSettings } from '../../settings';
+import { activityDayKey, classifyReviewRepetition, recordActivity, unrecordActivity } from '../activity';
 import TextInputModal from './TextInputModal';
 import ConfirmModal from './ConfirmModal';
 
@@ -66,6 +68,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 export interface RepeatViewPluginHost {
   setActiveRepeatView(view: RepeatView | undefined): void;
+  recordReview(repetition: Repetition, when?: DateTime): void;
+  unrecordActivity(dayKey: string, classification: 'new' | 'review' | 'other'): void;
 }
 
 class RepeatView extends ItemView {
@@ -271,11 +275,13 @@ class RepeatView extends ItemView {
     if (!this.currentFile || !this.currentRepetition) {
       return;
     }
+    const dayKey = activityDayKey(DateTime.now(), this.settings.dayStartsAt);
     this.undoStack.push(buildUndoEntry(
       this.currentFile.path,
       this.currentRepetition,
       action,
       rating,
+      dayKey,
     ));
   }
 
@@ -293,6 +299,9 @@ class RepeatView extends ItemView {
     }
 
     try {
+      if (entry.activityDayKey && entry.activityClassification && entry.action === 'rating') {
+        this.pluginHost.unrecordActivity(entry.activityDayKey, entry.activityClassification);
+      }
       this.resetView();
       const markdown = await this.app.vault.read(file);
       const newMarkdown = updateRepetitionMetadata(markdown, entry.metadata);
@@ -363,6 +372,9 @@ class RepeatView extends ItemView {
 
   async applyChoice(choice: RepeatChoice, file: TFile) {
     this.captureUndoSnapshot('rating', choice.rating);
+    if (this.currentRepetition) {
+      this.pluginHost.recordReview(this.currentRepetition);
+    }
     this.resetView();
     const markdown = await this.app.vault.read(file);
     const newMarkdown = updateRepetitionMetadata(

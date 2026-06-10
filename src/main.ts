@@ -8,8 +8,10 @@ import {
   Setting,
 } from 'obsidian';
 import { Rating } from 'ts-fsrs';
+import { DateTime } from 'luxon';
 
 import RepeatView, { REPEATING_NOTES_DUE_VIEW } from './repeat/obsidian/RepeatView';
+import HeatmapView, { REVISOR_STATS_VIEW } from './repeat/obsidian/HeatmapView';
 import { RepeatPluginSettings, DEFAULT_SETTINGS } from './settings';
 import { updateRepetitionMetadata } from './frontmatter';
 import { getAPI } from 'obsidian-dataview';
@@ -19,17 +21,20 @@ import { createInitialFsrsRepetition } from './repeat/fsrs';
 import { FSRS_RATING_LABELS } from './repeat/choices';
 import { parseRepetition } from './repeat/parsers';
 import { buildQueueMetadata, QueueAction } from './repeat/queueActions';
+import { ReviewActivityLog, activityDayKey, recordActivity, unrecordActivity, classifyReviewRepetition } from './repeat/activity';
 
 const COUNT_DEBOUNCE_MS = 5 * 1000;
 
 export default class RepeatPlugin extends Plugin {
   settings: RepeatPluginSettings;
+  activity: ReviewActivityLog;
   statusBarItem: HTMLElement | undefined;
   ribbonIcon: HTMLElement | undefined;
   activeRepeatView: RepeatView | undefined;
 
   constructor(app: App, manifest: PluginManifest) {
     super(app, manifest);
+    this.activity = {};
     this.updateNotesDueCount = debounce(
       this.updateNotesDueCount, COUNT_DEBOUNCE_MS).bind(this);
     this.manageStatusBarItem = this.manageStatusBarItem.bind(this);
@@ -83,12 +88,30 @@ export default class RepeatPlugin extends Plugin {
     );
   }
 
+  async activateStatsView() {
+    const existing = this.app.workspace.getLeavesOfType(REVISOR_STATS_VIEW);
+    if (existing.length) {
+      this.app.workspace.revealLeaf(existing[0]);
+      return;
+    }
+    const leaf = this.app.workspace.getLeaf('tab');
+    await leaf.setViewState({ type: REVISOR_STATS_VIEW, active: true });
+    this.app.workspace.revealLeaf(leaf);
+  }
+
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const raw = await this.loadData();
+    if (raw && raw.settings) {
+      this.settings = Object.assign({}, DEFAULT_SETTINGS, raw.settings);
+      this.activity = raw.activity ?? {};
+    } else {
+      this.settings = Object.assign({}, DEFAULT_SETTINGS, raw ?? {});
+      this.activity = {};
+    }
   }
 
   async saveSettings() {
-    await this.saveData(this.settings);
+    await this.saveData({ settings: this.settings, activity: this.activity });
     if (!this.settings.showDueCountInStatusBar && this.statusBarItem) {
       this.statusBarItem.remove();
       this.statusBarItem = undefined;
@@ -104,6 +127,25 @@ export default class RepeatPlugin extends Plugin {
     if (this.settings.showRibbonIcon && !this.ribbonIcon) {
       this.makeRepeatRibbonIcon();
     }
+  }
+
+  async saveActivity() {
+    await this.saveData({ settings: this.settings, activity: this.activity });
+  }
+
+  recordReview(repetition: Parameters<typeof classifyReviewRepetition>[0], when: DateTime = DateTime.now()) {
+    const key = activityDayKey(when, this.settings.dayStartsAt);
+    const classification = classifyReviewRepetition(repetition);
+    recordActivity(this.activity, key, classification);
+    void this.saveActivity();
+  }
+
+  unrecordActivity(
+    dayKey: string,
+    classification: 'new' | 'review' | 'other',
+  ) {
+    unrecordActivity(this.activity, dayKey, classification);
+    void this.saveActivity();
   }
 
   makeStatusBarItem() {
@@ -298,6 +340,14 @@ export default class RepeatPlugin extends Plugin {
         return true;
       },
     });
+
+    this.addCommand({
+      id: 'revisor-show-stats',
+      name: 'Show stats',
+      callback: () => {
+        this.activateStatsView();
+      },
+    });
   }
 
   async onload() {
@@ -314,11 +364,16 @@ export default class RepeatPlugin extends Plugin {
         this,
       ),
     );
+    this.registerView(
+      REVISOR_STATS_VIEW,
+      (leaf) => new HeatmapView(leaf, this.settings, this.saveSettings.bind(this), this),
+    );
     this.addSettingTab(new RepeatPluginSettingTab(this.app, this));
   }
 
   onunload() {
     this.app.workspace.detachLeavesOfType(REPEATING_NOTES_DUE_VIEW);
+    this.app.workspace.detachLeavesOfType(REVISOR_STATS_VIEW);
   }
 }
 
