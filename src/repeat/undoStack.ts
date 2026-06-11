@@ -2,7 +2,7 @@ import { Rating } from 'ts-fsrs';
 
 import { QueueAction } from './queueActions';
 import { Repetition } from './repeatTypes';
-import { classifyReviewRepetition } from './activity';
+import { classifyKind, ReviewKind } from './activity';
 import { serializeRepetition } from './serializers';
 
 export type UndoEntry = {
@@ -12,7 +12,8 @@ export type UndoEntry = {
   rating?: Rating;
   timestamp: number;
   activityDayKey?: string;
-  activityClassification?: 'new' | 'review' | 'other';
+  activityClassification?: ReviewKind;
+  logIndex?: number;
 };
 
 export function buildUndoEntry(
@@ -21,6 +22,7 @@ export function buildUndoEntry(
   action: UndoEntry['action'],
   rating?: Rating,
   activityDayKey?: string,
+  logIndex?: number,
 ): UndoEntry {
   return {
     filePath,
@@ -29,7 +31,8 @@ export function buildUndoEntry(
     rating,
     timestamp: Date.now(),
     activityDayKey,
-    activityClassification: classifyReviewRepetition(repetition),
+    activityClassification: classifyKind(repetition),
+    logIndex,
   };
 }
 

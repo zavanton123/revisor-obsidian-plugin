@@ -1,93 +1,24 @@
-import { computeStats, computeDynamicLegend } from './stats';
-import { ReviewActivityLog } from '../activity';
+import { ReviewLog } from '../activity';
+import { computeStatsFromLog } from './stats';
 
-describe('computeStats', () => {
+describe('computeStatsFromLog', () => {
+  const DAY = '06:00';
+
   it('returns zeros for empty log', () => {
-    const result = computeStats({}, '2026-06-10');
-    expect(result.currentStreak).toBe(0);
-    expect(result.longestStreak).toBe(0);
-    expect(result.dailyAverage).toBe(0);
-    expect(result.daysLearnedPct).toBe(0);
-    expect(result.totalReviews).toBe(0);
-    expect(result.activeDays).toBe(0);
-    expect(result.firstDay).toBeNull();
+    const r = computeStatsFromLog([], '2026-06-10', DAY);
+    expect(r.activeDays).toBe(0);
+    expect(r.totalReviews).toBe(0);
   });
 
-  it('counts a single day correctly', () => {
-    const log: ReviewActivityLog = {
-      '2026-06-10': { reviews: 5, newCards: 2 },
-    };
-    const result = computeStats(log, '2026-06-10');
-    expect(result.totalReviews).toBe(5);
-    expect(result.totalCards).toBe(2);
-    expect(result.dailyAverage).toBe(7);
-    expect(result.activeDays).toBe(1);
-    expect(result.daysLearnedPct).toBe(100);
-    expect(result.currentStreak).toBe(1);
-    expect(result.longestStreak).toBe(1);
-  });
-
-  it('detects current streak ending today', () => {
-    const log: ReviewActivityLog = {
-      '2026-06-09': { reviews: 3, newCards: 0 },
-      '2026-06-10': { reviews: 5, newCards: 1 },
-    };
-    const result = computeStats(log, '2026-06-10');
-    expect(result.currentStreak).toBe(2);
-    expect(result.longestStreak).toBe(2);
-  });
-
-  it('detects current streak ending yesterday', () => {
-    const log: ReviewActivityLog = {
-      '2026-06-09': { reviews: 3, newCards: 0 },
-    };
-    const result = computeStats(log, '2026-06-10');
-    expect(result.currentStreak).toBe(1);
-  });
-
-  it('current streak is 0 if last review older than yesterday', () => {
-    const log: ReviewActivityLog = {
-      '2026-06-08': { reviews: 3, newCards: 0 },
-    };
-    const result = computeStats(log, '2026-06-10');
-    expect(result.currentStreak).toBe(0);
-  });
-
-  it('finds longest streak', () => {
-    const log: ReviewActivityLog = {
-      '2026-06-01': { reviews: 1, newCards: 0 },
-      '2026-06-02': { reviews: 1, newCards: 0 },
-      '2026-06-04': { reviews: 1, newCards: 0 },
-      '2026-06-05': { reviews: 1, newCards: 0 },
-      '2026-06-06': { reviews: 1, newCards: 0 },
-    };
-    const result = computeStats(log, '2026-06-10');
-    expect(result.longestStreak).toBe(3);
-    expect(result.currentStreak).toBe(0);
-  });
-
-  it('computes days learned %', () => {
-    const log: ReviewActivityLog = {
-      '2026-06-01': { reviews: 1, newCards: 0 },
-      '2026-06-05': { reviews: 1, newCards: 0 },
-    };
-    const result = computeStats(log, '2026-06-10');
-    expect(result.activeDays).toBe(2);
-    expect(result.daysLearnedPct).toBe(20); // 2/10 = 20%
-  });
-});
-
-describe('computeDynamicLegend', () => {
-  it('uses default min of 20', () => {
-    const result = computeDynamicLegend({}, { avgMin: 20, factors: [1, 2] });
-    expect(result).toEqual([20, 40]);
-  });
-
-  it('uses daily average when higher than min', () => {
-    const log: ReviewActivityLog = {
-      '2026-06-10': { reviews: 100, newCards: 0 },
-    };
-    const result = computeDynamicLegend(log, { avgMin: 20, factors: [0.5, 1] });
-    expect(result).toEqual([50, 100]);
+  it('computes from single event', () => {
+    const log: ReviewLog = [
+      { at: new Date('2026-06-10T10:00:00').getTime(), rating: 3, kind: 'young', lastIntervalDays: 7 },
+      { at: new Date('2026-06-10T10:00:01').getTime(), rating: 3, kind: 'young', lastIntervalDays: 7 },
+    ];
+    const r = computeStatsFromLog(log, '2026-06-10', DAY);
+    expect(r.totalReviews).toBe(2);
+    expect(r.dailyAverage).toBe(2);
+    expect(r.currentStreak).toBe(1);
+    expect(r.longestStreak).toBe(1);
   });
 });

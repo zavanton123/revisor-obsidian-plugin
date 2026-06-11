@@ -21,7 +21,7 @@ import { serializeRepetition } from '../serializers';
 import { buildUndoEntry, ReviewUndoStack } from '../undoStack';
 import { renderMarkdown, renderTitleElement } from '../../markdown';
 import { RepeatPluginSettings } from '../../settings';
-import { activityDayKey, classifyReviewRepetition, recordActivity, unrecordActivity } from '../activity';
+import { activityDayKey } from '../activity';
 import TextInputModal from './TextInputModal';
 import ConfirmModal from './ConfirmModal';
 
@@ -68,8 +68,9 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 export interface RepeatViewPluginHost {
   setActiveRepeatView(view: RepeatView | undefined): void;
-  recordReview(repetition: Repetition, when?: DateTime): void;
-  unrecordActivity(dayKey: string, classification: 'new' | 'review' | 'other'): void;
+  reviewLog: { length: number };
+  recordReview(repetition: Repetition, rating: number, elapsedMs?: number, when?: number): void;
+  unrecordLastReview(eventIndex: number): void;
 }
 
 class RepeatView extends ItemView {
@@ -276,12 +277,14 @@ class RepeatView extends ItemView {
       return;
     }
     const dayKey = activityDayKey(DateTime.now(), this.settings.dayStartsAt);
+    const logIndex = this.pluginHost.reviewLog?.length;
     this.undoStack.push(buildUndoEntry(
       this.currentFile.path,
       this.currentRepetition,
       action,
       rating,
       dayKey,
+      logIndex,
     ));
   }
 
@@ -299,8 +302,8 @@ class RepeatView extends ItemView {
     }
 
     try {
-      if (entry.activityDayKey && entry.activityClassification && entry.action === 'rating') {
-        this.pluginHost.unrecordActivity(entry.activityDayKey, entry.activityClassification);
+      if (entry.logIndex != null && entry.action === 'rating') {
+        this.pluginHost.unrecordLastReview(entry.logIndex);
       }
       this.resetView();
       const markdown = await this.app.vault.read(file);
@@ -371,9 +374,12 @@ class RepeatView extends ItemView {
   }
 
   async applyChoice(choice: RepeatChoice, file: TFile) {
+    const logIndex = this.pluginHost.reviewLog.length;
     this.captureUndoSnapshot('rating', choice.rating);
     if (this.currentRepetition) {
-      this.pluginHost.recordReview(this.currentRepetition);
+      const now = Date.now();
+      (this.undoStack.peek() as any).logIndex = logIndex;
+      this.pluginHost.recordReview(this.currentRepetition, choice.rating, undefined, now);
     }
     this.resetView();
     const markdown = await this.app.vault.read(file);

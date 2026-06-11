@@ -11,7 +11,7 @@ import { Rating } from 'ts-fsrs';
 import { DateTime } from 'luxon';
 
 import RepeatView, { REPEATING_NOTES_DUE_VIEW } from './repeat/obsidian/RepeatView';
-import HeatmapView, { REVISOR_STATS_VIEW } from './repeat/obsidian/HeatmapView';
+import StatsView, { REVISOR_STATS_VIEW } from './repeat/obsidian/HeatmapView';
 import { RepeatPluginSettings, DEFAULT_SETTINGS } from './settings';
 import { updateRepetitionMetadata } from './frontmatter';
 import { getAPI } from 'obsidian-dataview';
@@ -21,20 +21,27 @@ import { createInitialFsrsRepetition } from './repeat/fsrs';
 import { FSRS_RATING_LABELS } from './repeat/choices';
 import { parseRepetition } from './repeat/parsers';
 import { buildQueueMetadata, QueueAction } from './repeat/queueActions';
-import { ReviewActivityLog, activityDayKey, recordActivity, unrecordActivity, classifyReviewRepetition } from './repeat/activity';
+import {
+  ReviewLog,
+  ReviewRating,
+  classifyKind,
+  ratingToNumber,
+  migrateLegacyActivity,
+} from './repeat/activity';
+import { Repetition } from './repeat/repeatTypes';
 
 const COUNT_DEBOUNCE_MS = 5 * 1000;
 
 export default class RepeatPlugin extends Plugin {
   settings: RepeatPluginSettings;
-  activity: ReviewActivityLog;
+  reviewLog: ReviewLog;
   statusBarItem: HTMLElement | undefined;
   ribbonIcon: HTMLElement | undefined;
   activeRepeatView: RepeatView | undefined;
 
   constructor(app: App, manifest: PluginManifest) {
     super(app, manifest);
-    this.activity = {};
+    this.reviewLog = [];
     this.updateNotesDueCount = debounce(
       this.updateNotesDueCount, COUNT_DEBOUNCE_MS).bind(this);
     this.manageStatusBarItem = this.manageStatusBarItem.bind(this);
@@ -103,15 +110,22 @@ export default class RepeatPlugin extends Plugin {
     const raw = await this.loadData();
     if (raw && raw.settings) {
       this.settings = Object.assign({}, DEFAULT_SETTINGS, raw.settings);
-      this.activity = raw.activity ?? {};
+      this.reviewLog = raw.reviewLog ?? [];
+      if (this.reviewLog.length === 0 && raw.activity && Object.keys(raw.activity).length > 0) {
+        this.reviewLog = migrateLegacyActivity(raw.activity, this.settings.dayStartsAt);
+      }
     } else {
       this.settings = Object.assign({}, DEFAULT_SETTINGS, raw ?? {});
-      this.activity = {};
+      if ((raw as any)?.activity && Object.keys((raw as any).activity).length > 0) {
+        this.reviewLog = migrateLegacyActivity((raw as any).activity, this.settings.dayStartsAt);
+      } else {
+        this.reviewLog = [];
+      }
     }
   }
 
   async saveSettings() {
-    await this.saveData({ settings: this.settings, activity: this.activity });
+    await this.saveData({ settings: this.settings, reviewLog: this.reviewLog });
     if (!this.settings.showDueCountInStatusBar && this.statusBarItem) {
       this.statusBarItem.remove();
       this.statusBarItem = undefined;
@@ -129,23 +143,32 @@ export default class RepeatPlugin extends Plugin {
     }
   }
 
-  async saveActivity() {
-    await this.saveData({ settings: this.settings, activity: this.activity });
+  async saveReviewLog() {
+    await this.saveData({ settings: this.settings, reviewLog: this.reviewLog });
   }
 
-  recordReview(repetition: Parameters<typeof classifyReviewRepetition>[0], when: DateTime = DateTime.now()) {
-    const key = activityDayKey(when, this.settings.dayStartsAt);
-    const classification = classifyReviewRepetition(repetition);
-    recordActivity(this.activity, key, classification);
-    void this.saveActivity();
-  }
-
-  unrecordActivity(
-    dayKey: string,
-    classification: 'new' | 'review' | 'other',
+  recordReview(
+    repetition: Repetition,
+    rating: number,
+    elapsedMs?: number,
+    when: number = Date.now(),
   ) {
-    unrecordActivity(this.activity, dayKey, classification);
-    void this.saveActivity();
+    this.reviewLog.push({
+      at: when,
+      rating: ratingToNumber(rating),
+      kind: classifyKind(repetition),
+      lastIntervalDays: repetition.fsrs?.scheduledDays ?? 0,
+      elapsedMs,
+    });
+    void this.saveReviewLog();
+  }
+
+  unrecordLastReview(eventIndex: number) {
+    const idx = eventIndex >= 0 ? eventIndex : this.reviewLog.length + eventIndex;
+    if (idx >= 0 && idx < this.reviewLog.length) {
+      this.reviewLog.splice(idx, 1);
+      void this.saveReviewLog();
+    }
   }
 
   makeStatusBarItem() {
@@ -366,7 +389,7 @@ export default class RepeatPlugin extends Plugin {
     );
     this.registerView(
       REVISOR_STATS_VIEW,
-      (leaf) => new HeatmapView(leaf, this.settings, this.saveSettings.bind(this), this),
+      (leaf) => new StatsView(leaf, this.settings, this.saveSettings.bind(this), this),
     );
     this.addSettingTab(new RepeatPluginSettingTab(this.app, this));
   }

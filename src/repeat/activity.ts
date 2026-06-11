@@ -1,6 +1,5 @@
 import { DateTime } from 'luxon';
 
-import { isNewCard } from './queueEligibility';
 import { Repetition } from './repeatTypes';
 
 function parseTime(twentyFourHourTime: string) {
@@ -10,13 +9,6 @@ function parseTime(twentyFourHourTime: string) {
     minute: parseInt(minuteString),
   };
 }
-
-export interface DayActivity {
-  reviews: number;
-  newCards: number;
-}
-
-export type ReviewActivityLog = Record<string, DayActivity>;
 
 export function activityDayKey(now: DateTime, dayStartsAt: string): string {
   const { hour, minute } = parseTime(dayStartsAt);
@@ -32,55 +24,100 @@ export function activityDayKey(now: DateTime, dayStartsAt: string): string {
   return start.toISODate()!;
 }
 
-export function classifyReviewRepetition(
-  repetition: Repetition,
-): 'new' | 'review' | 'other' {
-  if (isNewCard(repetition)) {
-    return 'new';
-  }
-  if (repetition.fsrs?.state === 'review') {
-    return 'review';
-  }
-  return 'other';
+export function activityDayKeyMs(epochMs: number, dayStartsAt: string): string {
+  return activityDayKey(DateTime.fromMillis(epochMs), dayStartsAt);
 }
 
-export function recordActivity(
-  log: ReviewActivityLog,
-  dayKey: string,
-  classification: 'new' | 'review' | 'other',
-): ReviewActivityLog {
-  if (classification === 'other') {
-    return log;
-  }
-  const day = log[dayKey] ?? { reviews: 0, newCards: 0 };
-  if (classification === 'new') {
-    day.newCards += 1;
-  } else {
-    day.reviews += 1;
-  }
-  log[dayKey] = day;
-  return log;
+export function dayIndex(epochMs: number, dayStartsAt: string): number {
+  const now = DateTime.now();
+  const todayStart = activityDayKey(now, dayStartsAt);
+  const eventStart = activityDayKeyMs(epochMs, dayStartsAt);
+  const today = DateTime.fromISO(todayStart);
+  const event = DateTime.fromISO(eventStart);
+  return Math.floor(event.diff(today, 'days').days);
 }
 
-export function unrecordActivity(
-  log: ReviewActivityLog,
-  dayKey: string,
-  classification: 'new' | 'review' | 'other',
-): ReviewActivityLog {
-  if (classification === 'other') {
-    return log;
+// ── Review event log ──
+
+export type ReviewRating = 1 | 2 | 3 | 4;
+export type ReviewKind = 'learn' | 'relearn' | 'young' | 'mature';
+
+export interface ReviewEvent {
+  at: number;
+  rating: ReviewRating;
+  kind: ReviewKind;
+  lastIntervalDays: number;
+  elapsedMs?: number;
+}
+
+export type ReviewLog = ReviewEvent[];
+
+export function ratingToNumber(rating: number): ReviewRating {
+  const r = Math.round(rating);
+  if (r < 1 || r > 4) return 3;
+  return r as ReviewRating;
+}
+
+export function classifyKind(rep: Repetition): ReviewKind {
+  const s = rep.fsrs?.state;
+  if (!s) return 'learn';
+  if (s === 'new') return 'learn';
+  if (s === 'learning') return 'learn';
+  if (s === 'relearning') return 'relearn';
+  const ivl = rep.fsrs?.scheduledDays ?? 0;
+  return ivl >= 21 ? 'mature' : 'young';
+}
+
+export function isCorrect(rating: ReviewRating): boolean {
+  return rating > 1;
+}
+
+// ── Derived daily counts (for the heatmap) ──
+
+export function dailyCountsFromLog(
+  log: ReviewLog,
+  dayStartsAt: string,
+): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const e of log) {
+    const key = activityDayKeyMs(e.at, dayStartsAt);
+    m.set(key, (m.get(key) ?? 0) + 1);
   }
-  const day = log[dayKey];
-  if (!day) {
-    return log;
+  return m;
+}
+
+export function dailyCountsByKindFromLog(
+  log: ReviewLog,
+  dayStartsAt: string,
+): Map<string, { learn: number; relearn: number; young: number; mature: number }> {
+  const m = new Map<string, { learn: number; relearn: number; young: number; mature: number }>();
+  const empty = () => ({ learn: 0, relearn: 0, young: 0, mature: 0 });
+  for (const e of log) {
+    const key = activityDayKeyMs(e.at, dayStartsAt);
+    const day = m.get(key) ?? empty();
+    day[e.kind] += 1;
+    m.set(key, day);
   }
-  if (classification === 'new') {
-    day.newCards = Math.max(0, day.newCards - 1);
-  } else {
-    day.reviews = Math.max(0, day.reviews - 1);
-  }
-  if (day.reviews === 0 && day.newCards === 0) {
-    delete log[dayKey];
+  return m;
+}
+
+// ── Migration from legacy per-day counters ──
+
+export function migrateLegacyActivity(
+  legacyActivity: Record<string, { reviews: number; newCards: number }>,
+  dayStartsAt: string,
+): ReviewLog {
+  const log: ReviewLog = [];
+  for (const [dayKey, day] of Object.entries(legacyActivity)) {
+    const at = DateTime.fromISO(dayKey)
+      .set({ hour: 6, minute: 0 }) // approximate timestamp
+      .toMillis();
+    for (let i = 0; i < (day.newCards ?? 0); i++) {
+      log.push({ at, rating: 3, kind: 'learn', lastIntervalDays: 0 });
+    }
+    for (let i = 0; i < (day.reviews ?? 0); i++) {
+      log.push({ at: at + i * 1000, rating: 3, kind: 'young', lastIntervalDays: 7 });
+    }
   }
   return log;
 }
