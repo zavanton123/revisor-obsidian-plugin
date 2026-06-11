@@ -236,11 +236,13 @@ export async function renderMarkdown(
 
 /**
  * Renders note title and link to note based on Obsidian's embed styles.
+ * When linkContainer is provided, the link icon is placed there instead of under the title.
  */
 export async function renderTitleElement(
   container: HTMLElement,
   file: TFile,
   vault: Vault,
+  linkContainer?: HTMLElement,
 ) {
   const embedTitle = createEl('div', { cls: [
     'markdown-embed-title',
@@ -252,16 +254,22 @@ export async function renderTitleElement(
   // This element is a div in Obsidian's own embed, but that makes clicking
   // to open the note more complicated. So, we use a simple link.
   const embedLink = createEl('a', {
-    cls: 'markdown-embed-link',
+    cls: 'markdown-embed-link repeat-note-link',
     attr: {
       'data-href': file.basename,
       'href': getNoteUri(vault, file.path),
       'target': '_blank',
       'rel': 'noopener',
+      'aria-label': `Open ${file.basename}`,
+      'title': `Open ${file.basename}`,
     }
   });
   setIcon(embedLink, 'link');
 
   container.appendChild(embedTitle);
-  container.appendChild(embedLink);
+  if (linkContainer) {
+    linkContainer.appendChild(embedLink);
+  } else {
+    container.appendChild(embedLink);
+  }
 }

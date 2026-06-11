@@ -544,7 +544,9 @@ class RepeatView extends ItemView {
     renderTitleElement(
       this.previewContainer,
       file,
-      this.app.vault);
+      this.app.vault,
+      this.buttonsContainer,
+    );
 
     this.markdownContainer = createEl('div', {
       cls: 'repeat-note-content repeat-markdown_blurred',

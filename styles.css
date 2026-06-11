@@ -32,11 +32,33 @@
 
 .repeat-buttons {
   flex-shrink: 0;
-  text-align: center;
-  padding: 12px 16px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 12px 48px 12px 16px;
   background-color: var(--background-primary);
   border-top: 1px solid var(--background-modifier-border);
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.repeat-buttons .repeat-note-link {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.repeat-buttons .repeat-note-link:hover {
+  color: var(--text-normal);
+  opacity: 1;
 }
 
 .repeat-buttons > button {
@@ -138,13 +160,6 @@
   margin: 0 0 12px;
   text-align: center;
   display: block;
-}
-
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-embedded_note .markdown-embed-link {
-  position: static;
-  display: block;
-  width: fit-content;
-  margin: 0 auto 8px;
 }
 
 .repeat-markdown_embed_title {
