@@ -109,13 +109,14 @@
 
 .repeat-embedded_note {
   padding: 15px 24px 32px;
-  width: min(920px, 88%);
-  max-width: 920px;
+  width: min(100%, 95%);
+  max-width: none;
   margin-left: auto;
   margin-right: auto;
   border: none;
   border-left: none;
   box-sizing: border-box;
+  position: relative;
 }
 
 .repeat-note-content {
@@ -125,13 +126,31 @@
 }
 
 .workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-embedded_note .markdown-embed-title {
+  position: static;
+  width: 100%;
+  max-width: none;
+  left: auto;
+  right: auto;
+  top: auto;
   border-left: none;
   padding-left: 0;
+  padding-right: 0;
+  margin: 0 0 12px;
+  text-align: center;
+  display: block;
+}
+
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-embedded_note .markdown-embed-link {
+  position: static;
+  display: block;
+  width: fit-content;
+  margin: 0 auto 8px;
 }
 
 .repeat-markdown_embed_title {
   text-overflow: inherit;
   white-space: normal;
+  text-align: center;
 }
 
 .repeat-setup_modal {
