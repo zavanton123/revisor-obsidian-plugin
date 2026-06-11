@@ -1,7 +1,7 @@
 {
   "id": "repeat-plugin",
   "name": "Revisor",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "minAppVersion": "0.1.0",
   "description": "Review notes using FSRS spaced repetition.",
   "author": "Anton Zaviyalov",

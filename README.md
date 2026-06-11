@@ -15,6 +15,8 @@ All scheduling state lives in the note's YAML frontmatter, so your vault stays p
 - **Filtering** by tags or any Dataview source expression, with savable filters
 - **Status bar & ribbon** shortcuts showing how many notes are due
 - **Queue breakdown** — when empty, shows buried, suspended, and not-yet-due counts
+- **Review stats dashboard** — Anki-style stats screen with activity heatmap, today summary, reviews graph, card counts, future due, answer buttons, hourly breakdown, true retention, and FSRS distribution graphs
+- **Persistent review log** — each rating is recorded for stats (from install forward; undo removes the matching entry)
 - **Plain frontmatter** — no proprietary database; edit schedules by hand if needed
 
 ## Requirements
@@ -94,7 +96,7 @@ Pressing **`u`** in the review pane restores the previous `due_at` and `fsrs` st
 | Scope | Up to 30 review steps per pane session |
 | Lifetime | Cleared when you close the review pane |
 | Alert | Brief notice on success; nothing on empty stack |
-| Limitations | No redo; no persistent history (v1) |
+| Stats | Undo also removes the matching entry from the review activity log |
 
 Also available as **Revisor: Undo last review** in the command palette.
 
@@ -133,14 +135,36 @@ To **stop** reviewing a note, remove `due_at` and `fsrs` from frontmatter (or de
 | **Revisor: Undo last review** | Restore previous `due_at` + `fsrs` |
 | **Revisor: Unsuspend note** | Clear suspended flag (from editor) |
 | **Revisor: Unbury note** | Clear buried flag (from editor) |
+| **Show stats** | Open the Revisor stats dashboard |
+
+## Stats dashboard
+
+Run **Show stats** from the command palette to open a full-width stats screen modeled on Anki's statistics view.
+
+### Panels
+
+| Panel | What it shows |
+|-------|----------------|
+| **Today** | Reviews today, again %, mature correct %, learn/young/mature breakdown |
+| **Activity** | Current streak, longest streak, daily average, days learned % |
+| **Calendar** | GitHub-style heatmap of review activity by day (year navigation) |
+| **Reviews** | Stacked review history by card phase |
+| **Card counts** | New / learning / young / mature / suspended / buried |
+| **Future due** | Forecast of upcoming due notes |
+| **Answer buttons** | Again / Hard / Good / Easy counts by learning phase |
+| **Hourly breakdown** | Reviews and success rate by hour of day |
+| **True retention** | Young / mature retention by period |
+| **Intervals / Stability / Difficulty / Retrievability / Added** | FSRS and scheduling distributions |
+
+Stats are computed from a **persistent review event log** stored in plugin data (`data.json`). Each rating appends an event; undo removes it. History accumulates from when you install or upgrade to 0.4.0 — older reviews are not backfilled unless you had prior daily activity data (migrated automatically).
 
 ## Review pane
 
 ### Layout
 
 - **Top (fixed):** collapsible "*N* notes due" bar with filters
-- **Middle (scrollable):** note title and content (max-width 920px)
-- **Bottom (fixed):** Again / Hard / Good / Easy buttons (color-coded)
+- **Middle (scrollable):** centered note title, note content (wide layout), open-note link in the bottom bar
+- **Bottom (fixed):** Again / Hard / Good / Easy buttons (color-coded), with a link icon in the bottom-right corner to open the current note
 
 ### Keyboard shortcuts
 
@@ -186,6 +210,20 @@ npm run build    # production build
 ```
 
 Copy `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/plugins/repeat-plugin/`.
+
+## Changelog
+
+### 0.4.0
+
+- **Stats dashboard** with heatmap, today summary, reviews graph, card counts, future due, answer buttons, hourly breakdown, true retention, and FSRS distribution panels
+- **Persistent review log** for stats (with undo support and legacy activity migration)
+- **Review pane UI**: wider note content, larger centered title, balanced spacing, open-note link moved to bottom bar
+
+### 0.3.0
+
+- Queue actions: bury, suspend, forget, unsuspend, unbury
+- Undo last review (`u`)
+- Filtering with saved filters and tag shortcuts
 
 ## Credits
 
