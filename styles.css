@@ -397,10 +397,12 @@
 }
 
 .revisor-stats-sections {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  padding: 0 4px;
+  max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .revisor-stats-panel {

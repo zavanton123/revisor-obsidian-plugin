@@ -3,9 +3,9 @@ import {
   ButtonsData, HourlyData, RetentionData, HistogramData,
 } from './aggregate';
 
-const CHART_H = 120;
-const CHART_W = 600;
-const PAD_L = 40;
+const CHART_H = 130;
+const CHART_W = 740;
+const PAD_L = 48;
 const PAD_R = 10;
 const PAD_T = 5;
 const PAD_B = 25;
