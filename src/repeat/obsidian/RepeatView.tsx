@@ -226,6 +226,15 @@ class RepeatView extends ItemView {
       return;
     }
 
+    if (event.key === 'e' || event.key === 'E') {
+      if (this.currentFile) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.openOriginalNote();
+      }
+      return;
+    }
+
     const isBlurred = this.markdownContainer?.classList.contains('repeat-markdown_blurred');
 
     if (isBlurred) {
@@ -258,6 +267,15 @@ class RepeatView extends ItemView {
 
   hasCurrentNote(): boolean {
     return !!this.currentFile && !!this.currentRepetition;
+  }
+
+  openOriginalNote(): void {
+    const link = this.buttonsContainer?.querySelector<HTMLAnchorElement>(
+      '.repeat-note-link',
+    );
+    if (link) {
+      link.click();
+    }
   }
 
   canUndo(): boolean {
