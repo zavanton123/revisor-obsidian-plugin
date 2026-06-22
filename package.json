@@ -1,6 +1,6 @@
 {
   "name": "obsidian-repeat-plugin",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Revisor — review notes using FSRS spaced repetition.",
   "main": "./src/main.ts",
   "scripts": {

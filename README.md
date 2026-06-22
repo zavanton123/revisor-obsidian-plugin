@@ -11,7 +11,7 @@ All scheduling state lives in the note's YAML frontmatter, so your vault stays p
 - **Four rating buttons**: Again, Hard, Good, Easy — with keyboard shortcuts
 - **Undo last review** (`u`) — restore previous `due_at` + `fsrs` after a mis-click
 - **Queue actions**: bury (hide until tomorrow), suspend, forget (reset FSRS), unsuspend, unbury
-- **Dataview-powered queue** of due notes, sorted by due date
+- **Dataview-powered queue** of due notes with **random order** in the review pane
 - **Filtering** by tags or any Dataview source expression, with savable filters
 - **Status bar & ribbon** shortcuts showing how many notes are due
 - **Queue breakdown** — when empty, shows buried, suspended, and not-yet-due counts
@@ -189,6 +189,10 @@ Expand the due-count header to filter the queue:
 
 Notes in the **Ignore folder path** (Settings) are excluded from the queue — useful for templates.
 
+### Queue order
+
+The review pane picks the **next due note at random** among all notes matching your filter. Counts, tag shortcuts, and the status bar still reflect the full due queue sorted by `due_at`; only which card appears next is randomized. Learning cards that remain due after a rating can appear again in the same session.
+
 ## Settings
 
 | Setting | Description |
@@ -212,6 +216,10 @@ npm run build    # production build
 Copy `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/plugins/repeat-plugin/`.
 
 ## Changelog
+
+### 0.5.0
+
+- **Random review order** — the review pane shows due notes in random order instead of always picking the earliest `due_at`
 
 ### 0.4.0
 
