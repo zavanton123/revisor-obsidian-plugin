@@ -56,20 +56,32 @@ export function getNotesDue(
     .sort((page: any) => page.repetition.repeatDueAt, 'asc');
 }
 
+export function pickRandomDuePage(
+  pages: Record<string, Literal>[],
+): Record<string, Literal> | undefined {
+  if (pages.length === 0) {
+    return;
+  }
+  const index = Math.floor(Math.random() * pages.length);
+  return pages[index];
+}
+
 export function getNextDueNote(
   dv: DataviewApi | undefined,
   ignoreFolderPath: string,
   ignoreFilePath?: string | undefined,
   filterQuery?: string,
 ): Record<string, Literal> | undefined {
-  const page = getNotesDue(
+  const dueNotes = getNotesDue(
     dv,
     ignoreFolderPath,
     ignoreFilePath,
     filterQuery,
-  )?.first();
-  if (!page) { return; }
-  return page;
+  );
+  if (!dueNotes?.length) {
+    return;
+  }
+  return pickRandomDuePage(dueNotes.array());
 }
 
 export function getQueueStats(
