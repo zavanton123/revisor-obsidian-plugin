@@ -27,6 +27,7 @@ import ConfirmModal from './ConfirmModal';
 
 interface SetPageOptions {
   forceFilePath?: string;
+  excludeFilePath?: string;
 }
 
 const MODIFY_DEBOUNCE_MS = 1 * 1000;
@@ -194,6 +195,15 @@ class RepeatView extends ItemView {
   async onOpen() {
     this.pluginHost.setActiveRepeatView(this);
     this.containerEl.setAttr('tabindex', '-1');
+    this.registerDomEvent(this.containerEl, 'mousedown', (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement
+          && target.closest('input, textarea, select, button, a')) {
+        return;
+      }
+      this.app.workspace.setActiveLeaf(this.leaf, { focus: true });
+      this.containerEl.focus();
+    });
     this.registerDomEvent(document, 'keydown', this.handleKeyDown, { capture: true });
     if (!this.dv) {
       this.setMessage(
@@ -217,8 +227,16 @@ class RepeatView extends ItemView {
     return this.app.workspace.activeLeaf?.view === this;
   }
 
+  acceptsReviewShortcuts(): boolean {
+    if (isTypingTarget(document.activeElement)) {
+      return false;
+    }
+    return this.isActiveView()
+      || this.containerEl.contains(document.activeElement);
+  }
+
   handleKeyDownImpl(event: KeyboardEvent) {
-    if (!this.isActiveView() || isTypingTarget(event.target)) {
+    if (!this.acceptsReviewShortcuts() || isTypingTarget(event.target)) {
       return;
     }
 
@@ -235,6 +253,14 @@ class RepeatView extends ItemView {
         event.stopPropagation();
         this.openOriginalNote();
       }
+      return;
+    }
+
+    if ((event.key === 's' || event.key === 'S') && this.currentFile) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      void this.reloadReview();
       return;
     }
 
@@ -282,6 +308,13 @@ class RepeatView extends ItemView {
     if (link) {
       link.click();
     }
+  }
+
+  async reloadReview() {
+    const excludePath = this.currentDueFilePath;
+    this.pausedReviewPath = undefined;
+    this.resetView();
+    await this.setPage({ excludeFilePath: excludePath });
   }
 
   canUndo(): boolean {
@@ -501,11 +534,19 @@ class RepeatView extends ItemView {
     }
 
     if (!dueFilePath || !repetition) {
-      const page = getNextDueNote(
+      const excludePath = options?.excludeFilePath;
+      let page = getNextDueNote(
         this.dv,
         this.settings.ignoreFolderPath,
-        undefined,
+        excludePath,
         this.settings.filterQuery || undefined);
+      if (!page && excludePath) {
+        page = getNextDueNote(
+          this.dv,
+          this.settings.ignoreFolderPath,
+          undefined,
+          this.settings.filterQuery || undefined);
+      }
       if (page) {
         dueFilePath = (page.file as any).path;
         repetition = page.repetition as Repetition;
