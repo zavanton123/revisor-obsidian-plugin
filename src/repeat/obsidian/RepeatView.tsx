@@ -108,6 +108,7 @@ class RepeatView extends ItemView {
   filterExpanded: boolean;
   handleKeyDown: (event: KeyboardEvent) => void;
   undoStack: ReviewUndoStack;
+  pausedReviewPath: string | undefined;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -152,6 +153,7 @@ class RepeatView extends ItemView {
     this.undoLastReview = this.undoLastReview.bind(this);
     this.filterExpanded = false;
     this.undoStack = new ReviewUndoStack();
+    this.pausedReviewPath = undefined;
 
     this.component = new Component();
 
@@ -206,6 +208,7 @@ class RepeatView extends ItemView {
 
   async onClose() {
     this.undoStack.clear();
+    this.pausedReviewPath = undefined;
     this.pluginHost.setActiveRepeatView(undefined);
     this.disableExternalHandlers();
   }
@@ -270,6 +273,9 @@ class RepeatView extends ItemView {
   }
 
   openOriginalNote(): void {
+    if (this.currentDueFilePath) {
+      this.pausedReviewPath = this.currentDueFilePath;
+    }
     const link = this.buttonsContainer?.querySelector<HTMLAnchorElement>(
       '.repeat-note-link',
     );
@@ -365,6 +371,7 @@ class RepeatView extends ItemView {
     if (!file || !repetition) {
       return;
     }
+    this.pausedReviewPath = undefined;
     this.captureUndoSnapshot(action);
     const filePath = file.path;
     const metadata = buildQueueMetadata(action, repetition, this.settings);
@@ -399,6 +406,7 @@ class RepeatView extends ItemView {
       (this.undoStack.peek() as any).logIndex = logIndex;
       this.pluginHost.recordReview(this.currentRepetition, choice.rating, undefined, now);
     }
+    this.pausedReviewPath = undefined;
     this.resetView();
     const markdown = await this.app.vault.read(file);
     const newMarkdown = updateRepetitionMetadata(
@@ -444,17 +452,19 @@ class RepeatView extends ItemView {
 
   async handleExternalModifyOrDelete(file: TFile) {
     if (file.path === this.currentDueFilePath) {
+      const preservePath = this.currentDueFilePath;
       await this.promiseMetadataChangeOrTimeOut();
       this.resetView();
-      this.setPage();
+      await this.setPage({ forceFilePath: preservePath });
     }
   }
 
   async handleExternalRename(file: TFile, oldFilePath: string) {
     if (oldFilePath === this.currentDueFilePath) {
       await this.promiseMetadataChangeOrTimeOut();
+      this.currentDueFilePath = file.path;
       this.resetView();
-      this.setPage();
+      await this.setPage({ forceFilePath: file.path });
     }
   }
 
@@ -466,28 +476,37 @@ class RepeatView extends ItemView {
     let dueFilePath: string | undefined;
     let repetition: Repetition | undefined;
 
-    if (options?.forceFilePath) {
-      const forcedFile = this.app.vault.getMarkdownFiles()
-        .find((file) => file.path === options.forceFilePath);
-      if (!forcedFile) {
-        this.setMessage(`Error: Could not find note ${options.forceFilePath}.`);
-        return;
+    const targetPath = options?.forceFilePath ?? this.pausedReviewPath;
+    if (targetPath) {
+      const targetFile = this.app.vault.getMarkdownFiles()
+        .find((file) => file.path === targetPath);
+      if (!targetFile) {
+        if (options?.forceFilePath) {
+          this.setMessage(`Error: Could not find note ${targetPath}.`);
+          return;
+        }
+        this.pausedReviewPath = undefined;
+      } else {
+        repetition = this.getRepetitionForFile(targetFile);
+        if (!repetition) {
+          if (options?.forceFilePath) {
+            this.setMessage(`Error: Note ${targetPath} is not a Revisor note.`);
+            return;
+          }
+          this.pausedReviewPath = undefined;
+        } else {
+          dueFilePath = targetFile.path;
+        }
       }
-      repetition = this.getRepetitionForFile(forcedFile);
-      if (!repetition) {
-        this.setMessage(`Error: Note ${options.forceFilePath} is not a Revisor note.`);
-        return;
-      }
-      dueFilePath = forcedFile.path;
-    } else {
+    }
+
+    if (!dueFilePath || !repetition) {
       const page = getNextDueNote(
         this.dv,
         this.settings.ignoreFolderPath,
         undefined,
         this.settings.filterQuery || undefined);
-      if (!page) {
-        dueFilePath = undefined;
-      } else {
+      if (page) {
         dueFilePath = (page.file as any).path;
         repetition = page.repetition as Repetition;
       }
