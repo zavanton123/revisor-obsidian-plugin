@@ -110,6 +110,7 @@ class RepeatView extends ItemView {
   handleKeyDown: (event: KeyboardEvent) => void;
   undoStack: ReviewUndoStack;
   pausedReviewPath: string | undefined;
+  suppressExternalUpdates: boolean;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -155,6 +156,7 @@ class RepeatView extends ItemView {
     this.filterExpanded = false;
     this.undoStack = new ReviewUndoStack();
     this.pausedReviewPath = undefined;
+    this.suppressExternalUpdates = false;
 
     this.component = new Component();
 
@@ -358,6 +360,7 @@ class RepeatView extends ItemView {
       return false;
     }
 
+    this.beginInternalUpdate();
     try {
       if (entry.logIndex != null && entry.action === 'rating') {
         this.pluginHost.unrecordLastReview(entry.logIndex);
@@ -375,6 +378,8 @@ class RepeatView extends ItemView {
       const message = error instanceof Error ? error.message : String(error);
       new Notice(`Could not undo: ${message}`);
       return false;
+    } finally {
+      this.endInternalUpdate();
     }
   }
 
@@ -408,13 +413,18 @@ class RepeatView extends ItemView {
     this.captureUndoSnapshot(action);
     const filePath = file.path;
     const metadata = buildQueueMetadata(action, repetition, this.settings);
-    this.resetView();
-    const markdown = await this.app.vault.read(file);
-    const newMarkdown = updateRepetitionMetadata(markdown, metadata);
-    this.currentDueFilePath = filePath;
-    await this.app.vault.modify(file, newMarkdown);
-    await this.promiseMetadataChangeOrTimeOut();
-    this.setPage();
+    this.beginInternalUpdate();
+    try {
+      this.resetView();
+      const markdown = await this.app.vault.read(file);
+      const newMarkdown = updateRepetitionMetadata(markdown, metadata);
+      this.currentDueFilePath = filePath;
+      await this.app.vault.modify(file, newMarkdown);
+      await this.promiseMetadataChangeOrTimeOut();
+      await this.setPage();
+    } finally {
+      this.endInternalUpdate();
+    }
   }
 
   unblurNote() {
@@ -440,14 +450,30 @@ class RepeatView extends ItemView {
       this.pluginHost.recordReview(this.currentRepetition, choice.rating, undefined, now);
     }
     this.pausedReviewPath = undefined;
-    this.resetView();
-    const markdown = await this.app.vault.read(file);
-    const newMarkdown = updateRepetitionMetadata(
-      markdown, serializeRepetition(choice.nextRepetition));
-    this.currentDueFilePath = file.path;
-    await this.app.vault.modify(file, newMarkdown);
-    await this.promiseMetadataChangeOrTimeOut();
-    this.setPage();
+    this.beginInternalUpdate();
+    try {
+      this.resetView();
+      const markdown = await this.app.vault.read(file);
+      const newMarkdown = updateRepetitionMetadata(
+        markdown, serializeRepetition(choice.nextRepetition));
+      this.currentDueFilePath = file.path;
+      await this.app.vault.modify(file, newMarkdown);
+      await this.promiseMetadataChangeOrTimeOut();
+      await this.setPage();
+    } finally {
+      this.endInternalUpdate();
+    }
+  }
+
+  beginInternalUpdate() {
+    this.suppressExternalUpdates = true;
+  }
+
+  endInternalUpdate() {
+    // Keep ignoring vault modify events until after the debounced external handler window.
+    window.setTimeout(() => {
+      this.suppressExternalUpdates = false;
+    }, MODIFY_DEBOUNCE_MS + 100);
   }
 
   enableExternalHandlers() {
@@ -484,11 +510,18 @@ class RepeatView extends ItemView {
   }
 
   async handleExternalModifyOrDelete(file: TFile) {
-    if (file.path === this.currentDueFilePath) {
-      const preservePath = this.currentDueFilePath;
-      await this.promiseMetadataChangeOrTimeOut();
-      this.resetView();
-      await this.setPage({ forceFilePath: preservePath });
+    if (this.suppressExternalUpdates) {
+      return;
+    }
+    if (file.path !== this.currentDueFilePath && file.path !== this.pausedReviewPath) {
+      return;
+    }
+    await this.promiseMetadataChangeOrTimeOut();
+    this.resetView();
+    if (this.pausedReviewPath) {
+      await this.setPage({ forceFilePath: this.pausedReviewPath });
+    } else {
+      await this.setPage();
     }
   }
 
@@ -587,6 +620,7 @@ class RepeatView extends ItemView {
       this.currentChoices = [];
       this.currentFile = undefined;
       this.currentRepetition = undefined;
+      this.currentDueFilePath = undefined;
       this.markdownContainer = undefined;
       this.refreshFilterUI();
       this.buttonsContainer.createEl('button', {
