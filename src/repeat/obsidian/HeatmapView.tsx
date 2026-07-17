@@ -7,19 +7,14 @@ import { HeatmapCalendar } from '../heatmap/HeatmapCalendar';
 import { computeStatsFromCounts, computeDynamicLegendFromCounts } from '../heatmap/stats';
 import {
   aggregateToday,
-  aggregateReviews,
   aggregateCardCounts,
   aggregateFutureDue,
-  aggregateButtons,
-  aggregateHourly,
-  aggregateTrueRetention,
-  aggregateIntervals,
-  aggregateStability,
-  aggregateDifficulty,
-  aggregateRetrievability,
-  aggregateAdded,
 } from '../stats/aggregate';
-import { renderTodayPanel, renderCardCountsPanel, renderReviewsPanel, renderButtonsPanel, renderHourlyPanel, renderTrueRetentionPanel, renderIntervalsPanel, renderFutureDuePanel, renderStabilityPanel, renderDifficultyPanel, renderRetrievabilityPanel, renderAddedPanel } from '../stats/charts';
+import {
+  renderTodayPanel,
+  renderCardCountsPanel,
+  renderFutureDuePanel,
+} from '../stats/charts';
 import { buildCardSnapshot } from '../stats/snapshot';
 
 export const REVISOR_STATS_VIEW = 'revisor-stats-view';
@@ -130,10 +125,6 @@ class StatsView extends ItemView {
       nextBtn.addEventListener('click', () => { this.selectedYear++; renderCal(); });
     });
 
-    // ── Reviews ──
-    const reviewData = aggregateReviews(log, dayStartsAt);
-    this.addPanel('Reviews', (el) => renderReviewsPanel(el, reviewData));
-
     // ── Card Counts ──
     const cc = aggregateCardCounts(cards);
     this.addPanel('Card Counts', (el) => renderCardCountsPanel(el, cc));
@@ -141,30 +132,6 @@ class StatsView extends ItemView {
     // ── Future Due ──
     const fd = aggregateFutureDue(cards);
     this.addPanel('Future Due', (el) => renderFutureDuePanel(el, fd));
-
-    // ── Buttons ──
-    const btns = aggregateButtons(log, dayStartsAt);
-    this.addPanel('Answer Buttons', (el) => renderButtonsPanel(el, btns));
-
-    // ── Hourly ──
-    const hr = aggregateHourly(log, dayStartsAt);
-    this.addPanel('Hourly Breakdown', (el) => renderHourlyPanel(el, hr));
-
-    // ── True Retention ──
-    const trData = aggregateTrueRetention(log, dayStartsAt);
-    this.addPanel('True Retention', (el) => renderTrueRetentionPanel(el, trData));
-
-    // ── FSRS distributions ──
-    const intv = aggregateIntervals(cards);
-    if (intv.values.length > 0) this.addPanel('Intervals', (el) => renderIntervalsPanel(el, intv));
-    const stab = aggregateStability(cards);
-    if (stab.values.length > 0) this.addPanel('Stability', (el) => renderStabilityPanel(el, stab));
-    const diff = aggregateDifficulty(cards);
-    if (diff.values.length > 0) this.addPanel('Difficulty', (el) => renderDifficultyPanel(el, diff));
-    const ret = aggregateRetrievability(cards);
-    if (ret.values.length > 0) this.addPanel('Retrievability', (el) => renderRetrievabilityPanel(el, ret));
-    const added = aggregateAdded(cards);
-    if (added.values.length > 0) this.addPanel('Added', (el) => renderAddedPanel(el, added));
   }
 
   private addPanel(title: string, render: (el: HTMLElement) => void) {
