@@ -56,6 +56,19 @@ export function getNotesDue(
     .sort((page: any) => page.repetition.repeatDueAt, 'asc');
 }
 
+export function getTrackedNotes(
+  dv: DataviewApi | undefined,
+  ignoreFolderPath: string,
+  ignoreFilePath?: string | undefined,
+  filterQuery?: string,
+): DataArray<Record<string, Literal>> | undefined {
+  return mutateRevisorPages(dv, ignoreFolderPath, ignoreFilePath, filterQuery)
+    ?.where((page: any) => {
+      const frontmatter = page.file.frontmatter || {};
+      return frontmatter.fsrs !== undefined;
+    });
+}
+
 export function pickRandomDuePage(
   pages: Record<string, Literal>[],
 ): Record<string, Literal> | undefined {
@@ -82,6 +95,24 @@ export function getNextDueNote(
     return;
   }
   return pickRandomDuePage(dueNotes.array());
+}
+
+export function getNextDrillNote(
+  dv: DataviewApi | undefined,
+  ignoreFolderPath: string,
+  ignoreFilePath?: string | undefined,
+  filterQuery?: string,
+): Record<string, Literal> | undefined {
+  const notes = getTrackedNotes(
+    dv,
+    ignoreFolderPath,
+    ignoreFilePath,
+    filterQuery,
+  );
+  if (!notes?.length) {
+    return;
+  }
+  return pickRandomDuePage(notes.array());
 }
 
 export function getQueueStats(
@@ -134,20 +165,14 @@ export function countByEligibility(
   return count;
 }
 
-export function getTagsFromDueNotes(
-  dv: DataviewApi | undefined,
-  ignoreFolderPath: string,
-  ignoreFilePath?: string | undefined,
+function getTagsFromPages(
+  pages: DataArray<Record<string, Literal>> | undefined,
 ): TagStats[] | undefined {
-  const dueNotes = getNotesDue(
-    dv, ignoreFolderPath, ignoreFilePath,
-  );
-
-  if (!dueNotes) return undefined;
+  if (!pages) return undefined;
 
   const tagCounts = new Map<string, number>();
 
-  dueNotes.forEach((page: any) => {
+  pages.forEach((page: any) => {
     const tags = page.file.etags?.values || [];
     tags.forEach((tag: string) => {
       tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
@@ -160,4 +185,20 @@ export function getTagsFromDueNotes(
       if (b.count !== a.count) return b.count - a.count;
       return a.tag.localeCompare(b.tag);
     });
+}
+
+export function getTagsFromDueNotes(
+  dv: DataviewApi | undefined,
+  ignoreFolderPath: string,
+  ignoreFilePath?: string | undefined,
+): TagStats[] | undefined {
+  return getTagsFromPages(getNotesDue(dv, ignoreFolderPath, ignoreFilePath));
+}
+
+export function getTagsFromTrackedNotes(
+  dv: DataviewApi | undefined,
+  ignoreFolderPath: string,
+  ignoreFilePath?: string | undefined,
+): TagStats[] | undefined {
+  return getTagsFromPages(getTrackedNotes(dv, ignoreFolderPath, ignoreFilePath));
 }

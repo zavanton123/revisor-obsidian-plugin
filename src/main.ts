@@ -10,7 +10,10 @@ import {
 import { Rating } from 'ts-fsrs';
 import { DateTime } from 'luxon';
 
-import RepeatView, { REPEATING_NOTES_DUE_VIEW } from './repeat/obsidian/RepeatView';
+import RepeatView, {
+  REPEATING_NOTES_DUE_VIEW,
+  REVISOR_DRILL_VIEW,
+} from './repeat/obsidian/RepeatView';
 import StatsView, { REVISOR_STATS_VIEW } from './repeat/obsidian/HeatmapView';
 import { RepeatPluginSettings, DEFAULT_SETTINGS } from './settings';
 import { updateRepetitionMetadata } from './frontmatter';
@@ -53,6 +56,12 @@ export default class RepeatPlugin extends Plugin {
     this.activeRepeatView = view;
   }
 
+  clearActiveRepeatView(view: RepeatView) {
+    if (this.activeRepeatView === view) {
+      this.activeRepeatView = undefined;
+    }
+  }
+
   applyReviewRating(rating: Rating) {
     this.activeRepeatView?.applyRating(rating);
   }
@@ -92,6 +101,18 @@ export default class RepeatPlugin extends Plugin {
     });
     this.app.workspace.revealLeaf(
       this.app.workspace.getLeavesOfType(REPEATING_NOTES_DUE_VIEW)[0]
+    );
+  }
+
+  async activateDrillView() {
+    this.app.workspace.detachLeavesOfType(REVISOR_DRILL_VIEW);
+
+    await this.app.workspace.getLeaf(true).setViewState({
+      type: REVISOR_DRILL_VIEW,
+      active: true,
+    });
+    this.app.workspace.revealLeaf(
+      this.app.workspace.getLeavesOfType(REVISOR_DRILL_VIEW)[0]
     );
   }
 
@@ -269,6 +290,14 @@ export default class RepeatPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: 'open-drill-view',
+      name: 'Drill notes',
+      callback: () => {
+        this.activateDrillView();
+      },
+    });
+
     ([
       [Rating.Again, 'again'],
       [Rating.Hard, 'hard'],
@@ -313,7 +342,8 @@ export default class RepeatPlugin extends Plugin {
         id: `revisor-${action}-note`,
         name: `Revisor: ${name}`,
         checkCallback: (checking: boolean) => {
-          if (!this.activeRepeatView?.hasCurrentNote()) {
+          if (!this.activeRepeatView?.hasCurrentNote()
+              || this.activeRepeatView.isDrillMode()) {
             return false;
           }
           if (!checking) {
@@ -385,6 +415,17 @@ export default class RepeatPlugin extends Plugin {
         this.settings,
         this.saveSettings.bind(this),
         this,
+        'review',
+      ),
+    );
+    this.registerView(
+      REVISOR_DRILL_VIEW,
+      (leaf) => new RepeatView(
+        leaf,
+        this.settings,
+        this.saveSettings.bind(this),
+        this,
+        'drill',
       ),
     );
     this.registerView(
@@ -396,6 +437,7 @@ export default class RepeatPlugin extends Plugin {
 
   onunload() {
     this.app.workspace.detachLeavesOfType(REPEATING_NOTES_DUE_VIEW);
+    this.app.workspace.detachLeavesOfType(REVISOR_DRILL_VIEW);
     this.app.workspace.detachLeavesOfType(REVISOR_STATS_VIEW);
   }
 }

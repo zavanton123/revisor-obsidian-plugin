@@ -3,7 +3,8 @@
   margin-top: 24px;
 }
 
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .view-content {
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .view-content,
+.workspace-leaf-content[data-type="revisor-drill-view"] .view-content {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -75,28 +76,32 @@
 }
 
 .repeat-buttons > button.repeat-fsrs-again,
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-again {
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-again,
+.workspace-leaf-content[data-type="revisor-drill-view"] .repeat-buttons > button.repeat-fsrs-again {
   background-color: #c0392b !important;
   color: #fff !important;
   border-color: #c0392b !important;
 }
 
 .repeat-buttons > button.repeat-fsrs-hard,
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-hard {
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-hard,
+.workspace-leaf-content[data-type="revisor-drill-view"] .repeat-buttons > button.repeat-fsrs-hard {
   background-color: #e67e22 !important;
   color: #fff !important;
   border-color: #e67e22 !important;
 }
 
 .repeat-buttons > button.repeat-fsrs-good,
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-good {
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-good,
+.workspace-leaf-content[data-type="revisor-drill-view"] .repeat-buttons > button.repeat-fsrs-good {
   background-color: #27ae60 !important;
   color: #fff !important;
   border-color: #27ae60 !important;
 }
 
 .repeat-buttons > button.repeat-fsrs-easy,
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-easy {
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-buttons > button.repeat-fsrs-easy,
+.workspace-leaf-content[data-type="revisor-drill-view"] .repeat-buttons > button.repeat-fsrs-easy {
   background-color: #2980b9 !important;
   color: #fff !important;
   border-color: #2980b9 !important;
@@ -149,7 +154,8 @@
   border-left: none;
 }
 
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-embedded_note .markdown-embed-title {
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-embedded_note .markdown-embed-title,
+.workspace-leaf-content[data-type="revisor-drill-view"] .repeat-embedded_note .markdown-embed-title {
   position: static;
   width: 100%;
   max-width: none;
@@ -167,17 +173,20 @@
   line-height: 1.25;
 }
 
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-note-content .markdown-preview-view {
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-note-content .markdown-preview-view,
+.workspace-leaf-content[data-type="revisor-drill-view"] .repeat-note-content .markdown-preview-view {
   padding-top: 0;
   padding-bottom: 0;
 }
 
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-note-content .markdown-preview-section {
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-note-content .markdown-preview-section,
+.workspace-leaf-content[data-type="revisor-drill-view"] .repeat-note-content .markdown-preview-section {
   padding-top: 0;
   margin-top: 0;
 }
 
-.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-note-content .markdown-preview-section > :first-child {
+.workspace-leaf-content[data-type="repeating-notes-due-view"] .repeat-note-content .markdown-preview-section > :first-child,
+.workspace-leaf-content[data-type="revisor-drill-view"] .repeat-note-content .markdown-preview-section > :first-child {
   margin-top: 0;
 }
 
@@ -394,6 +403,19 @@
 .repeat-filter-count {
   font-size: 13px;
   color: var(--text-muted);
+}
+
+.revisor-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
 }
 
 /* Filter Error */

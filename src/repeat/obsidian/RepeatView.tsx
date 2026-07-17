@@ -15,7 +15,16 @@ import { determineFrontmatterBounds, updateRepetitionMetadata } from '../../fron
 import { getRepeatChoices } from '../choices';
 import { parseRepetition } from '../parsers';
 import { RepeatChoice, Repetition } from '../repeatTypes';
-import { getNextDueNote, getNotesDue, getQueueStats, getTagsFromDueNotes, TagStats } from '../queries';
+import {
+  getNextDrillNote,
+  getNextDueNote,
+  getNotesDue,
+  getQueueStats,
+  getTagsFromDueNotes,
+  getTagsFromTrackedNotes,
+  getTrackedNotes,
+  TagStats,
+} from '../queries';
 import { buildQueueMetadata, QueueAction } from '../queueActions';
 import { serializeRepetition } from '../serializers';
 import { buildUndoEntry, ReviewUndoStack } from '../undoStack';
@@ -33,6 +42,9 @@ interface SetPageOptions {
 const MODIFY_DEBOUNCE_MS = 1 * 1000;
 const QUERY_DEBOUNCE_MS = 500;
 export const REPEATING_NOTES_DUE_VIEW = 'repeating-notes-due-view';
+export const REVISOR_DRILL_VIEW = 'revisor-drill-view';
+
+export type RepeatSessionMode = 'review' | 'drill';
 
 const RATING_BUTTON_CLASS: Record<Rating, string | undefined> = {
   [Rating.Manual]: undefined,
@@ -69,6 +81,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 export interface RepeatViewPluginHost {
   setActiveRepeatView(view: RepeatView | undefined): void;
+  clearActiveRepeatView(view: RepeatView): void;
   reviewLog: { length: number };
   recordReview(repetition: Repetition, rating: number, elapsedMs?: number, when?: number): void;
   unrecordLastReview(eventIndex: number): void;
@@ -82,7 +95,7 @@ class RepeatView extends ItemView {
   currentFile: TFile | undefined;
   currentRepetition: Repetition | undefined;
   dv: DataviewApi | undefined;
-  icon = 'clock';
+  icon: string;
   indexPromise: Promise<null> | undefined;
   markdownContainer: HTMLElement | undefined;
   messageContainer: HTMLElement;
@@ -111,14 +124,18 @@ class RepeatView extends ItemView {
   undoStack: ReviewUndoStack;
   pausedReviewPath: string | undefined;
   suppressExternalUpdates: boolean;
+  mode: RepeatSessionMode;
 
   constructor(
     leaf: WorkspaceLeaf,
     settings: RepeatPluginSettings,
     saveSettings: () => Promise<void>,
     pluginHost: RepeatViewPluginHost,
+    mode: RepeatSessionMode = 'review',
   ) {
     super(leaf);
+    this.mode = mode;
+    this.icon = mode === 'drill' ? 'swords' : 'clock';
     this.addRepeatButton = this.addRepeatButton.bind(this);
     this.applyChoice = this.applyChoice.bind(this);
     this.applyQueueAction = this.applyQueueAction.bind(this);
@@ -187,11 +204,15 @@ class RepeatView extends ItemView {
   }
 
   getViewType() {
-    return REPEATING_NOTES_DUE_VIEW;
+    return this.mode === 'drill' ? REVISOR_DRILL_VIEW : REPEATING_NOTES_DUE_VIEW;
   }
 
   getDisplayText() {
-    return 'Revisor';
+    return this.mode === 'drill' ? 'Revisor Drill' : 'Revisor';
+  }
+
+  isDrillMode(): boolean {
+    return this.mode === 'drill';
   }
 
   async onOpen() {
@@ -221,7 +242,7 @@ class RepeatView extends ItemView {
   async onClose() {
     this.undoStack.clear();
     this.pausedReviewPath = undefined;
-    this.pluginHost.setActiveRepeatView(undefined);
+    this.pluginHost.clearActiveRepeatView(this);
     this.disableExternalHandlers();
   }
 
@@ -320,7 +341,7 @@ class RepeatView extends ItemView {
   }
 
   canUndo(): boolean {
-    return this.undoStack.canUndo();
+    return !this.isDrillMode() && this.undoStack.canUndo();
   }
 
   getRepetitionForFile(file: TFile): Repetition | undefined {
@@ -387,6 +408,10 @@ class RepeatView extends ItemView {
     if (!this.currentFile || !this.currentRepetition) {
       return;
     }
+    if (this.isDrillMode()) {
+      new Notice('Queue actions are not available in drill mode');
+      return;
+    }
     if (action === 'forget' && this.settings.confirmForget) {
       const modal = new ConfirmModal(
         this.app,
@@ -442,6 +467,14 @@ class RepeatView extends ItemView {
   }
 
   async applyChoice(choice: RepeatChoice, file: TFile) {
+    this.pausedReviewPath = undefined;
+
+    if (this.isDrillMode()) {
+      this.resetView();
+      await this.setPage({ excludeFilePath: file.path });
+      return;
+    }
+
     const logIndex = this.pluginHost.reviewLog.length;
     this.captureUndoSnapshot('rating', choice.rating);
     if (this.currentRepetition) {
@@ -449,7 +482,6 @@ class RepeatView extends ItemView {
       (this.undoStack.peek() as any).logIndex = logIndex;
       this.pluginHost.recordReview(this.currentRepetition, choice.rating, undefined, now);
     }
-    this.pausedReviewPath = undefined;
     this.beginInternalUpdate();
     try {
       this.resetView();
@@ -568,13 +600,14 @@ class RepeatView extends ItemView {
 
     if (!dueFilePath || !repetition) {
       const excludePath = options?.excludeFilePath;
-      let page = getNextDueNote(
+      const pickNext = this.isDrillMode() ? getNextDrillNote : getNextDueNote;
+      let page = pickNext(
         this.dv,
         this.settings.ignoreFolderPath,
         excludePath,
         this.settings.filterQuery || undefined);
       if (!page && excludePath) {
-        page = getNextDueNote(
+        page = pickNext(
           this.dv,
           this.settings.ignoreFolderPath,
           undefined,
@@ -587,35 +620,47 @@ class RepeatView extends ItemView {
     }
 
     if (!dueFilePath || !repetition) {
-      const totalDue = getNotesDue(
-        this.dv,
-        this.settings.ignoreFolderPath,
-      )?.length || 0;
-
-      if (totalDue > 0 && this.settings.filterQuery) {
-        this.setMessage(`No notes matching filter. ${totalDue} other notes are due.`);
-      } else {
-        const stats = getQueueStats(
+      if (this.isDrillMode()) {
+        const totalTracked = getTrackedNotes(
           this.dv,
           this.settings.ignoreFolderPath,
-          undefined,
-          this.settings.filterQuery || undefined,
-        );
-        const parts: string[] = [];
-        if (stats.buried > 0) {
-          parts.push(`${stats.buried} buried`);
+        )?.length || 0;
+        if (totalTracked > 0 && this.settings.filterQuery) {
+          this.setMessage(`No notes matching filter. ${totalTracked} other tracked notes available.`);
+        } else {
+          this.setMessage('No tracked notes to drill.');
         }
-        if (stats.suspended > 0) {
-          parts.push(`${stats.suspended} suspended`);
+      } else {
+        const totalDue = getNotesDue(
+          this.dv,
+          this.settings.ignoreFolderPath,
+        )?.length || 0;
+
+        if (totalDue > 0 && this.settings.filterQuery) {
+          this.setMessage(`No notes matching filter. ${totalDue} other notes are due.`);
+        } else {
+          const stats = getQueueStats(
+            this.dv,
+            this.settings.ignoreFolderPath,
+            undefined,
+            this.settings.filterQuery || undefined,
+          );
+          const parts: string[] = [];
+          if (stats.buried > 0) {
+            parts.push(`${stats.buried} buried`);
+          }
+          if (stats.suspended > 0) {
+            parts.push(`${stats.suspended} suspended`);
+          }
+          if (stats.notDue > 0) {
+            parts.push(`${stats.notDue} not yet due`);
+          }
+          let message = 'All done for now!';
+          if (parts.length > 0) {
+            message += `\n${parts.join(' · ')}`;
+          }
+          this.setMessage(message);
         }
-        if (stats.notDue > 0) {
-          parts.push(`${stats.notDue} not yet due`);
-        }
-        let message = 'All done for now!';
-        if (parts.length > 0) {
-          message += `\n${parts.join(' · ')}`;
-        }
-        this.setMessage(message);
       }
       this.currentChoices = [];
       this.currentFile = undefined;
@@ -717,6 +762,13 @@ class RepeatView extends ItemView {
     });
     setIcon(this.filterToggleIcon, 'chevron-right');
 
+    if (this.isDrillMode()) {
+      this.filterHeader.createEl('span', {
+        cls: 'revisor-mode-badge',
+        text: 'Drill',
+      });
+    }
+
     this.filterCountEl = this.filterHeader.createEl('span', {
       cls: 'repeat-filter-count'
     });
@@ -815,7 +867,8 @@ class RepeatView extends ItemView {
   }
 
   refreshFilterUI() {
-    this.availableTags = getTagsFromDueNotes(
+    const getTags = this.isDrillMode() ? getTagsFromTrackedNotes : getTagsFromDueNotes;
+    this.availableTags = getTags(
       this.dv,
       this.settings.ignoreFolderPath,
       undefined,
@@ -855,8 +908,10 @@ class RepeatView extends ItemView {
 
   updateFilterCount() {
     const filterQuery = this.settings.filterQuery;
+    const listNotes = this.isDrillMode() ? getTrackedNotes : getNotesDue;
+    const totalLabel = this.isDrillMode() ? 'tracked notes' : 'notes due';
 
-    const totalCount = getNotesDue(
+    const totalCount = listNotes(
       this.dv,
       this.settings.ignoreFolderPath,
       undefined,
@@ -864,7 +919,7 @@ class RepeatView extends ItemView {
 
     if (filterQuery) {
       try {
-        const filteredCount = getNotesDue(
+        const filteredCount = listNotes(
           this.dv,
           this.settings.ignoreFolderPath,
           undefined,
@@ -882,12 +937,12 @@ class RepeatView extends ItemView {
         }
         this.filterErrorEl.style.display = 'none';
       } catch (e) {
-        this.filterCountEl.textContent = `${totalCount} notes due`;
+        this.filterCountEl.textContent = `${totalCount} ${totalLabel}`;
         this.filterErrorEl.textContent = `Invalid filter: ${e.message || 'Check your query syntax'}`;
         this.filterErrorEl.style.display = 'block';
       }
     } else {
-      this.filterCountEl.textContent = `${totalCount} notes due`;
+      this.filterCountEl.textContent = `${totalCount} ${totalLabel}`;
       this.filterErrorEl.style.display = 'none';
     }
   }
