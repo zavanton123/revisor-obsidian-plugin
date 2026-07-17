@@ -16,7 +16,6 @@ import { getRepeatChoices } from '../choices';
 import { parseRepetition } from '../parsers';
 import { RepeatChoice, Repetition } from '../repeatTypes';
 import {
-  getNextDrillNote,
   getNextDueNote,
   getNotesDue,
   getQueueStats,
@@ -125,6 +124,8 @@ class RepeatView extends ItemView {
   pausedReviewPath: string | undefined;
   suppressExternalUpdates: boolean;
   mode: RepeatSessionMode;
+  drillQueuePaths: string[] | undefined;
+  drillQueueKey: string | undefined;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -174,6 +175,8 @@ class RepeatView extends ItemView {
     this.undoStack = new ReviewUndoStack();
     this.pausedReviewPath = undefined;
     this.suppressExternalUpdates = false;
+    this.drillQueuePaths = undefined;
+    this.drillQueueKey = undefined;
 
     this.component = new Component();
 
@@ -242,12 +245,79 @@ class RepeatView extends ItemView {
   async onClose() {
     this.undoStack.clear();
     this.pausedReviewPath = undefined;
+    this.resetDrillQueue();
     this.pluginHost.clearActiveRepeatView(this);
     this.disableExternalHandlers();
   }
 
   isActiveView(): boolean {
     return this.app.workspace.activeLeaf?.view === this;
+  }
+
+  getDrillQueueKey(): string {
+    return [
+      this.settings.ignoreFolderPath,
+      this.settings.filterQuery || '',
+    ].join('\0');
+  }
+
+  resetDrillQueue() {
+    this.drillQueuePaths = undefined;
+    this.drillQueueKey = undefined;
+  }
+
+  ensureDrillQueue() {
+    const key = this.getDrillQueueKey();
+    if (this.drillQueuePaths && this.drillQueueKey === key) {
+      return;
+    }
+    const notes = getTrackedNotes(
+      this.dv,
+      this.settings.ignoreFolderPath,
+      undefined,
+      this.settings.filterQuery || undefined,
+    );
+    this.drillQueuePaths = notes?.array().map((page: any) => page.file.path as string) ?? [];
+    this.drillQueueKey = key;
+  }
+
+  removeFromDrillQueue(path: string) {
+    this.ensureDrillQueue();
+    if (!this.drillQueuePaths) {
+      return;
+    }
+    this.drillQueuePaths = this.drillQueuePaths.filter((candidate) => candidate !== path);
+  }
+
+  pickNextFromDrillQueue(excludePath?: string): { path: string; repetition: Repetition } | undefined {
+    this.ensureDrillQueue();
+    if (!this.drillQueuePaths?.length) {
+      return;
+    }
+
+    let candidates = this.drillQueuePaths;
+    if (excludePath) {
+      const withoutCurrent = candidates.filter((path) => path !== excludePath);
+      if (withoutCurrent.length > 0) {
+        candidates = withoutCurrent;
+      }
+    }
+    if (candidates.length === 0) {
+      return;
+    }
+
+    const path = candidates[Math.floor(Math.random() * candidates.length)];
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) {
+      this.removeFromDrillQueue(path);
+      return this.pickNextFromDrillQueue(excludePath);
+    }
+    const repetition = this.getRepetitionForFile(file);
+    if (!repetition) {
+      this.removeFromDrillQueue(path);
+      return this.pickNextFromDrillQueue(excludePath);
+    }
+    return { path, repetition };
   }
 
   acceptsReviewShortcuts(): boolean {
@@ -460,18 +530,28 @@ class RepeatView extends ItemView {
     if (!this.currentFile) {
       return;
     }
+    if (this.isDrillMode()) {
+      void this.completeDrillNote(this.currentFile);
+      return;
+    }
     const choice = this.currentChoices.find((c) => c.rating === rating);
     if (choice) {
       this.applyChoice(choice, this.currentFile);
     }
   }
 
+  async completeDrillNote(file: TFile) {
+    this.pausedReviewPath = undefined;
+    this.removeFromDrillQueue(file.path);
+    this.resetView();
+    await this.setPage();
+  }
+
   async applyChoice(choice: RepeatChoice, file: TFile) {
     this.pausedReviewPath = undefined;
 
     if (this.isDrillMode()) {
-      this.resetView();
-      await this.setPage({ excludeFilePath: file.path });
+      await this.completeDrillNote(file);
       return;
     }
 
@@ -600,32 +680,43 @@ class RepeatView extends ItemView {
 
     if (!dueFilePath || !repetition) {
       const excludePath = options?.excludeFilePath;
-      const pickNext = this.isDrillMode() ? getNextDrillNote : getNextDueNote;
-      let page = pickNext(
-        this.dv,
-        this.settings.ignoreFolderPath,
-        excludePath,
-        this.settings.filterQuery || undefined);
-      if (!page && excludePath) {
-        page = pickNext(
+      if (this.isDrillMode()) {
+        const next = this.pickNextFromDrillQueue(excludePath);
+        if (next) {
+          dueFilePath = next.path;
+          repetition = next.repetition;
+        }
+      } else {
+        let page = getNextDueNote(
           this.dv,
           this.settings.ignoreFolderPath,
-          undefined,
+          excludePath,
           this.settings.filterQuery || undefined);
-      }
-      if (page) {
-        dueFilePath = (page.file as any).path;
-        repetition = page.repetition as Repetition;
+        if (!page && excludePath) {
+          page = getNextDueNote(
+            this.dv,
+            this.settings.ignoreFolderPath,
+            undefined,
+            this.settings.filterQuery || undefined);
+        }
+        if (page) {
+          dueFilePath = (page.file as any).path;
+          repetition = page.repetition as Repetition;
+        }
       }
     }
 
     if (!dueFilePath || !repetition) {
       if (this.isDrillMode()) {
+        this.ensureDrillQueue();
+        const remaining = this.drillQueuePaths?.length ?? 0;
         const totalTracked = getTrackedNotes(
           this.dv,
           this.settings.ignoreFolderPath,
         )?.length || 0;
-        if (totalTracked > 0 && this.settings.filterQuery) {
+        if (remaining === 0 && totalTracked > 0) {
+          this.setMessage('Drill session complete! Click Refresh to start again.');
+        } else if (totalTracked > 0 && this.settings.filterQuery) {
           this.setMessage(`No notes matching filter. ${totalTracked} other tracked notes available.`);
         } else {
           this.setMessage('No tracked notes to drill.');
@@ -673,6 +764,7 @@ class RepeatView extends ItemView {
       },
       (buttonElement) => {
         buttonElement.onclick = () => {
+          this.resetDrillQueue();
           this.resetView();
           this.setPage();
         }
@@ -682,7 +774,9 @@ class RepeatView extends ItemView {
 
     this.refreshFilterUI();
     this.currentDueFilePath = dueFilePath;
-    const choices = getRepeatChoices(repetition, this.settings);
+    const choices = getRepeatChoices(repetition, this.settings, {
+      allowNotDue: this.isDrillMode(),
+    });
     this.currentChoices = choices;
     const matchingMarkdowns = this.app.vault.getMarkdownFiles()
       .filter((file) => file?.path === dueFilePath);
@@ -908,10 +1002,30 @@ class RepeatView extends ItemView {
 
   updateFilterCount() {
     const filterQuery = this.settings.filterQuery;
-    const listNotes = this.isDrillMode() ? getTrackedNotes : getNotesDue;
-    const totalLabel = this.isDrillMode() ? 'tracked notes' : 'notes due';
 
-    const totalCount = listNotes(
+    if (this.isDrillMode()) {
+      this.ensureDrillQueue();
+      const remaining = this.drillQueuePaths?.length ?? 0;
+      const totalTracked = getTrackedNotes(
+        this.dv,
+        this.settings.ignoreFolderPath,
+        undefined,
+        filterQuery || undefined,
+      )?.length || 0;
+      if (filterQuery) {
+        const matchingFilter = this.settings.savedFilters.find(
+          f => f.query === filterQuery
+        );
+        const prefix = matchingFilter ? `${matchingFilter.name}: ` : '';
+        this.filterCountEl.textContent = `${prefix}${remaining} remaining · ${totalTracked} in filter`;
+      } else {
+        this.filterCountEl.textContent = `${remaining} remaining · ${totalTracked} tracked notes`;
+      }
+      this.filterErrorEl.style.display = 'none';
+      return;
+    }
+
+    const totalCount = getNotesDue(
       this.dv,
       this.settings.ignoreFolderPath,
       undefined,
@@ -919,7 +1033,7 @@ class RepeatView extends ItemView {
 
     if (filterQuery) {
       try {
-        const filteredCount = listNotes(
+        const filteredCount = getNotesDue(
           this.dv,
           this.settings.ignoreFolderPath,
           undefined,
@@ -937,12 +1051,12 @@ class RepeatView extends ItemView {
         }
         this.filterErrorEl.style.display = 'none';
       } catch (e) {
-        this.filterCountEl.textContent = `${totalCount} ${totalLabel}`;
+        this.filterCountEl.textContent = `${totalCount} notes due`;
         this.filterErrorEl.textContent = `Invalid filter: ${e.message || 'Check your query syntax'}`;
         this.filterErrorEl.style.display = 'block';
       }
     } else {
-      this.filterCountEl.textContent = `${totalCount} ${totalLabel}`;
+      this.filterCountEl.textContent = `${totalCount} notes due`;
       this.filterErrorEl.style.display = 'none';
     }
   }
@@ -952,6 +1066,7 @@ class RepeatView extends ItemView {
     if (newQuery !== this.settings.filterQuery) {
       this.settings.filterQuery = newQuery;
       this.saveSettings();
+      this.resetDrillQueue();
       this.updateFilterCount();
       this.buttonsContainer.empty();
       this.previewContainer.empty();
@@ -973,10 +1088,11 @@ class RepeatView extends ItemView {
     this.queryInput.value = '';
     this.settings.filterQuery = '';
     await this.saveSettings();
+    this.resetDrillQueue();
     this.updateFilterCount();
     this.buttonsContainer.empty();
-      this.previewContainer.empty();
-      this.setPage();
+    this.previewContainer.empty();
+    this.setPage();
   }
 
   async handleSaveFilter() {
@@ -1018,6 +1134,7 @@ class RepeatView extends ItemView {
       this.queryInput.value = filter.query;
       this.settings.filterQuery = filter.query;
       await this.saveSettings();
+      this.resetDrillQueue();
       this.updateFilterCount();
       this.buttonsContainer.empty();
       this.previewContainer.empty();

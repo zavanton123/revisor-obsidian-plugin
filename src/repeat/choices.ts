@@ -20,13 +20,18 @@ export const FSRS_RATING_LABELS: Record<Rating, string> = {
 
 export const FSRS_RATINGS = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy];
 
+export interface GetRepeatChoicesOptions {
+  allowNotDue?: boolean;
+}
+
 function getFsrsRepeatChoices(
   repetition: Repetition,
   now: DateTime,
   settings: RepeatPluginSettings,
+  allowNotDue = false,
 ): RepeatChoice[] {
   const { repeatDueAt } = repetition;
-  if ((repeatDueAt > now) || !repeatDueAt) {
+  if (!allowNotDue && ((repeatDueAt > now) || !repeatDueAt)) {
     return [];
   }
 
@@ -54,20 +59,27 @@ function getFsrsRepeatChoices(
 
 export function getRepeatChoices(
   repetition: Repetition | undefined | null,
-  settings: RepeatPluginSettings
+  settings: RepeatPluginSettings,
+  options?: GetRepeatChoicesOptions,
 ): RepeatChoice[] {
   if (!repetition) {
     return [];
   }
   const now = DateTime.now();
-  return getFsrsRepeatChoices(repetition, now, settings);
+  return getFsrsRepeatChoices(
+    repetition,
+    now,
+    settings,
+    options?.allowNotDue === true,
+  );
 }
 
 export function getRepeatChoiceForRating(
   repetition: Repetition | undefined | null,
   settings: RepeatPluginSettings,
   rating: Rating,
+  options?: GetRepeatChoicesOptions,
 ): RepeatChoice | undefined {
-  return getRepeatChoices(repetition, settings)
+  return getRepeatChoices(repetition, settings, options)
     .find((choice) => choice.rating === rating);
 }

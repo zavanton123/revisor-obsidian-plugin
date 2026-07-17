@@ -54,6 +54,24 @@ test('not-yet-due note gets no choices', () => {
   }
 });
 
+test('not-yet-due note gets choices when allowNotDue is set', () => {
+  const originalNow = DateTime.now;
+  DateTime.now = () => mockNow;
+
+  try {
+    const repetition = createInitialFsrsRepetition(mockPluginSettings as any);
+    repetition.repeatDueAt = mockNow.plus({ days: 1 });
+    const choices = getRepeatChoices(repetition, mockPluginSettings as any, {
+      allowNotDue: true,
+    });
+
+    expect(choices).toHaveLength(4);
+    expect(choices.map((c) => c.rating)).toContain(Rating.Good);
+  } finally {
+    DateTime.now = originalNow;
+  }
+});
+
 test('rating choices update fsrs state', () => {
   const originalNow = DateTime.now;
   DateTime.now = () => mockNow;
