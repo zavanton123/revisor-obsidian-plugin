@@ -653,11 +653,15 @@ class RepeatView extends ItemView {
 
     choices.forEach(choice => this.addRepeatButton(choice, file));
 
+    const cache = this.app.metadataCache.getFileCache(file);
+    const revisorTitle = cache?.frontmatter?.['revisor-title'];
+    const displayTitle = typeof revisorTitle === 'string' ? revisorTitle : undefined;
     renderTitleElement(
       this.previewContainer,
       file,
       this.app.vault,
       this.buttonsContainer,
+      displayTitle,
     );
 
     this.markdownContainer = createEl('div', {

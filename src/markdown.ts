@@ -243,13 +243,15 @@ export async function renderTitleElement(
   file: TFile,
   vault: Vault,
   linkContainer?: HTMLElement,
+  displayTitle?: string,
 ) {
+  const title = displayTitle?.trim() || file.basename;
   const embedTitle = createEl('div', { cls: [
     'markdown-embed-title',
     'embed-title',
     'repeat-markdown_embed_title',
   ]});
-  embedTitle.setText(file.basename);
+  embedTitle.setText(title);
 
   // This element is a div in Obsidian's own embed, but that makes clicking
   // to open the note more complicated. So, we use a simple link.
