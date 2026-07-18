@@ -218,6 +218,22 @@ npm run build    # production build
 
 Copy `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/plugins/repeat-plugin/`.
 
+### Releasing
+
+Pushing a version tag triggers [Release](.github/workflows/release.yml): tests, build, and a GitHub Release with notes from `CHANGELOG.md` plus a deployable zip.
+
+```bash
+# 1. Bump version (updates manifest.json / versions.json / package.json)
+npm version 0.5.5 --no-git-tag-version
+
+# 2. Move CHANGELOG [Unreleased] notes into ## [0.5.5] - YYYY-MM-DD
+# 3. Commit, then tag and push:
+git tag v0.5.5
+git push origin master --tags
+```
+
+The tag must match `manifest.json` (e.g. `v0.5.5`). Assets: `revisor-0.5.5.zip`, `main.js`, `manifest.json`, `styles.css`.
+
 ## Changelog
 
 ### 0.5.0

@@ -5,6 +5,7 @@ All notable changes to Revisor are documented in this file.
 ## [Unreleased]
 
 - Reset review/drill filters when opening a session (active query is no longer persisted)
+- Release workflow: tag (`v*`) creates a GitHub Release with changelog notes and a deployable zip
 
 ## [0.5.4] - 2026-07-18
 

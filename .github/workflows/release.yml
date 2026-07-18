@@ -19,7 +19,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
 
       - name: Install dependencies
@@ -31,24 +31,104 @@ jobs:
       - name: Build plugin
         run: npm run build
 
-      - name: Read plugin version
-        id: version
+      - name: Resolve version and validate tag
+        id: meta
         run: |
-          VERSION=$(node -p "require('./manifest.json').version")
+          set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "zip_name=revisor-${VERSION}.zip" >> "$GITHUB_OUTPUT"
+          VERSION=$(node -p "require('./manifest.json').version")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${TAG#v}"
+
+          if [[ "$TAG" != v* ]]; then
+            echo "::error::Tag must start with 'v' (got ${TAG})"
+            exit 1
+          fi
+
+          if [[ "$VERSION" != "$TAG_VERSION" ]]; then
+            echo "::error::Tag ${TAG} does not match manifest.json version ${VERSION}"
+            exit 1
+          fi
+
+          if [[ "$PACKAGE_VERSION" != "$VERSION" ]]; then
+            echo "::error::package.json version ${PACKAGE_VERSION} does not match manifest.json version ${VERSION}"
+            exit 1
+          fi
+
+          for file in main.js manifest.json styles.css; do
+            if [[ ! -f "$file" ]]; then
+              echo "::error::Missing build artifact: ${file}"
+              exit 1
+            fi
+          done
+
+          PRERELEASE=false
+          if [[ "$TAG_VERSION" =~ -(alpha|beta|rc|pre|dev) ]]; then
+            PRERELEASE=true
+          fi
+
+          {
+            echo "tag=${TAG}"
+            echo "version=${VERSION}"
+            echo "zip_name=revisor-${VERSION}.zip"
+            echo "release_name=Revisor ${VERSION}"
+            echo "prerelease=${PRERELEASE}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Publishing ${TAG} as Revisor ${VERSION} (prerelease=${PRERELEASE})"
+
+      - name: Extract changelog and build release notes
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
+          NOTES_FILE=release-notes.md
+
+          awk -v ver="$VERSION" '
+            $0 ~ ("^## \\[" ver "\\]") { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > changelog-section.md
+
+          {
+            echo "## What's new"
+            echo
+            if grep -q '[^[:space:]]' changelog-section.md; then
+              cat changelog-section.md
+            else
+              echo "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ steps.meta.outputs.tag }}/CHANGELOG.md) for details."
+            fi
+            echo
+            echo "## Install"
+            echo
+            echo "1. Download \`${{ steps.meta.outputs.zip_name }}\` from the Assets below"
+            echo "2. Extract it into \`<vault>/.obsidian/plugins/repeat-plugin/\`"
+            echo "3. Enable **Revisor** under Settings → Community plugins"
+            echo
+            echo "The zip contains \`main.js\`, \`manifest.json\`, and \`styles.css\`."
+          } > "$NOTES_FILE"
+
+          echo "----- release notes -----"
+          cat "$NOTES_FILE"
 
       - name: Package plugin zip
         run: |
-          zip -9 "${{ steps.version.outputs.zip_name }}" main.js manifest.json styles.css
-          unzip -l "${{ steps.version.outputs.zip_name }}"
+          set -euo pipefail
+          ZIP_NAME="${{ steps.meta.outputs.zip_name }}"
+          zip -9 "$ZIP_NAME" main.js manifest.json styles.css
+          unzip -l "$ZIP_NAME"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Revisor ${{ steps.version.outputs.version }}
-          files: ${{ steps.version.outputs.zip_name }}
-          generate_release_notes: true
+          name: ${{ steps.meta.outputs.release_name }}
+          tag_name: ${{ steps.meta.outputs.tag }}
+          body_path: release-notes.md
+          files: |
+            ${{ steps.meta.outputs.zip_name }}
+            main.js
+            manifest.json
+            styles.css
+          draft: false
+          prerelease: ${{ steps.meta.outputs.prerelease }}
           fail_on_unmatched_files: true
+          make_latest: ${{ steps.meta.outputs.prerelease != 'true' }}
