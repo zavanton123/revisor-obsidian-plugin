@@ -141,10 +141,21 @@ export default class RepeatPlugin extends Plugin {
         this.reviewLog = [];
       }
     }
+    this.settings.filterQuery = '';
+  }
+
+  private getPersistableSettings(): RepeatPluginSettings {
+    return {
+      ...this.settings,
+      filterQuery: '',
+    };
   }
 
   async saveSettings() {
-    await this.saveData({ settings: this.settings, reviewLog: this.reviewLog });
+    await this.saveData({
+      settings: this.getPersistableSettings(),
+      reviewLog: this.reviewLog,
+    });
     if (!this.settings.showDueCountInStatusBar && this.statusBarItem) {
       this.statusBarItem.remove();
       this.statusBarItem = undefined;
@@ -163,7 +174,10 @@ export default class RepeatPlugin extends Plugin {
   }
 
   async saveReviewLog() {
-    await this.saveData({ settings: this.settings, reviewLog: this.reviewLog });
+    await this.saveData({
+      settings: this.getPersistableSettings(),
+      reviewLog: this.reviewLog,
+    });
   }
 
   recordReview(

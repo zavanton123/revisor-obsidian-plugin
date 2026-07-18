@@ -220,6 +220,7 @@ class RepeatView extends ItemView {
 
   async onOpen() {
     this.pluginHost.setActiveRepeatView(this);
+    this.settings.filterQuery = '';
     this.containerEl.setAttr('tabindex', '-1');
     this.registerDomEvent(this.containerEl, 'mousedown', (event: MouseEvent) => {
       const target = event.target;
@@ -1065,7 +1066,6 @@ class RepeatView extends ItemView {
     const newQuery = this.queryInput.value.trim();
     if (newQuery !== this.settings.filterQuery) {
       this.settings.filterQuery = newQuery;
-      this.saveSettings();
       this.resetDrillQueue();
       this.updateFilterCount();
       this.buttonsContainer.empty();
@@ -1084,10 +1084,9 @@ class RepeatView extends ItemView {
     this.handleQueryChange();
   }
 
-  async handleClearQuery() {
+  handleClearQuery() {
     this.queryInput.value = '';
     this.settings.filterQuery = '';
-    await this.saveSettings();
     this.resetDrillQueue();
     this.updateFilterCount();
     this.buttonsContainer.empty();
@@ -1123,7 +1122,7 @@ class RepeatView extends ItemView {
     modal.open();
   }
 
-  async handleLoadSavedFilter(event: Event) {
+  handleLoadSavedFilter(event: Event) {
     const select = event.target as HTMLSelectElement;
     const filterIndex = parseInt(select.value);
 
@@ -1133,7 +1132,6 @@ class RepeatView extends ItemView {
     if (filter) {
       this.queryInput.value = filter.query;
       this.settings.filterQuery = filter.query;
-      await this.saveSettings();
       this.resetDrillQueue();
       this.updateFilterCount();
       this.buttonsContainer.empty();
