@@ -155,7 +155,7 @@ export function updateRepetitionMetadata(
       throw Error('Failed to create frontmatter in note.');
     }
   }
-  let frontmatter = content.slice(...bounds);
+  let frontmatter = newContent.slice(...bounds);
   for (const field in serializedRepetition) {
     if (serializedRepetition[field] === undefined) {
       frontmatter = removeField(frontmatter, field);

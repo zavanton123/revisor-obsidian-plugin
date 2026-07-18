@@ -3,6 +3,7 @@ import {
   determineInlineFieldBounds,
   replaceOrInsertField,
   removeField,
+  updateRepetitionMetadata,
 } from './frontmatter';
 
 const validFrontmatter = `
@@ -183,5 +184,40 @@ describe('removeField', () => {
     ].join('\n');
     const result = removeField(frontmatter, 'field');
     expect(result).toEqual(frontmatter);
+  });
+});
+
+describe('updateRepetitionMetadata', () => {
+  test('creates frontmatter when note has none', () => {
+    const updated = updateRepetitionMetadata('Hello body\n', {
+      due_at: '2026-06-08T10:00:00.000-03:00',
+      fsrs: '{"state":"new"}',
+    });
+    expect(updated.startsWith('---\n')).toBe(true);
+    expect(updated).toContain('due_at: 2026-06-08T10:00:00.000-03:00');
+    expect(updated).toContain('fsrs: {"state":"new"}');
+    expect(updated).toContain('Hello body');
+  });
+
+  test('updates and removes fields in existing frontmatter', () => {
+    const content = [
+      '---',
+      'due_at: old',
+      'fsrs: {"state":"review"}',
+      'title: keep me',
+      '---',
+      'Body',
+      '',
+    ].join('\n');
+    const updated = updateRepetitionMetadata(content, {
+      due_at: 'new-due',
+      fsrs: undefined,
+      revisor_suspended: 'true',
+    });
+    expect(updated).toContain('due_at: new-due');
+    expect(updated).toContain('revisor_suspended: true');
+    expect(updated).toContain('title: keep me');
+    expect(updated).not.toContain('fsrs:');
+    expect(updated).toContain('Body');
   });
 });

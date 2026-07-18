@@ -8,7 +8,10 @@ import {
   cardToFsrsState,
   createInitialFsrsRepetition,
   enumToState,
+  fsrsCardToRepetition,
+  parseLearningSteps,
   repetitionToFsrsCard,
+  snapDueAtToReviewTime,
 } from './fsrs';
 import { parseRepetition } from './parsers';
 import { serializeFsrsState, serializeRepetition } from './serializers';
@@ -174,5 +177,53 @@ describe('fsrs scheduler helpers', () => {
       lapses: 0,
     }));
     expect(payload).toEqual({ state: 'new' });
+  });
+
+  test('parseLearningSteps splits and trims', () => {
+    expect(parseLearningSteps('1m, 10m, 1d')).toEqual(['1m', '10m', '1d']);
+    expect(parseLearningSteps(' 5m , , 1h ')).toEqual(['5m', '1h']);
+  });
+
+  test('snapDueAtToReviewTime keeps near-term dues as-is', () => {
+    const due = mockNow.plus({ days: 2, hours: 3 });
+    expect(snapDueAtToReviewTime(due, mockNow).toISO()).toBe(due.toISO());
+  });
+
+  test('snapDueAtToReviewTime snaps distant dues to 06:00', () => {
+    const due = mockNow.plus({ days: 10 }).set({ hour: 18, minute: 45 });
+    const snapped = snapDueAtToReviewTime(due, mockNow);
+    expect(snapped.hour).toBe(6);
+    expect(snapped.minute).toBe(0);
+  });
+
+  test('fsrsCardToRepetition maps card onto repetition', () => {
+    const base = createInitialFsrsRepetition(mockSettings as any, mockNow);
+    const card = {
+      due: mockNow.plus({ days: 3 }).toJSDate(),
+      stability: 4,
+      difficulty: 5.5,
+      elapsed_days: 1,
+      scheduled_days: 3,
+      learning_steps: 0,
+      reps: 2,
+      lapses: 0,
+      state: State.Review,
+      last_review: mockNow.toJSDate(),
+    };
+    const next = fsrsCardToRepetition(card, base, mockSettings as any, mockNow);
+    expect(next.fsrs?.state).toBe('review');
+    expect(next.fsrs?.stability).toBe(4);
+    expect(next.repeatDueAt.toISO()).toBe(
+      DateTime.fromJSDate(card.due).toISO(),
+    );
+  });
+
+  test('repetitionToFsrsCard falls back to empty card without fsrs', () => {
+    const card = repetitionToFsrsCard({
+      repeatTimeOfDay: 'AM',
+      repeatDueAt: mockNow,
+    }, mockNow.toJSDate());
+    expect(card.state).toBe(State.New);
+    expect(card.reps).toBe(0);
   });
 });

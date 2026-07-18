@@ -3,9 +3,13 @@ import { DateTime } from 'luxon';
 
 import { DEFAULT_SETTINGS } from '../settings';
 import {
+  canReviewNewCard,
+  canReviewReviewCard,
   decrementDailyStats,
+  formatDailyLimitMessage,
   getRemainingDailyLimits,
   getReviewDayStart,
+  hasActiveDailyLimits,
   incrementDailyStats,
   isWithinDailyLimits,
   normalizeDailyStats,
@@ -149,6 +153,49 @@ describe('decrementDailyStats', () => {
     };
     const after = decrementDailyStats(stats, baseRepetition());
     expect(after.reviewsReviewed).toBe(0);
+  });
+
+  test('decrements new and review counters', () => {
+    const stats = {
+      reviewDayStartMs: 0,
+      newReviewed: 2,
+      reviewsReviewed: 3,
+    };
+    expect(decrementDailyStats(stats, baseRepetition({
+      fsrs: { state: 'new', stability: 0, difficulty: 0, scheduledDays: 0,
+        learningSteps: 0, reps: 0, lapses: 0 },
+    })).newReviewed).toBe(1);
+    expect(decrementDailyStats(stats, baseRepetition()).reviewsReviewed).toBe(2);
+    expect(decrementDailyStats(stats, learningRepetition())).toEqual(stats);
+  });
+});
+
+describe('daily limit helpers', () => {
+  test('canReview helpers treat null as unlimited', () => {
+    expect(canReviewNewCard({ newRemaining: null, reviewRemaining: 0 })).toBe(true);
+    expect(canReviewReviewCard({ newRemaining: 0, reviewRemaining: null })).toBe(true);
+    expect(canReviewNewCard({ newRemaining: 0, reviewRemaining: 5 })).toBe(false);
+  });
+
+  test('hasActiveDailyLimits and formatDailyLimitMessage', () => {
+    expect(hasActiveDailyLimits(DEFAULT_SETTINGS)).toBe(false);
+    expect(hasActiveDailyLimits({
+      ...DEFAULT_SETTINGS,
+      maxNewPerDay: 10,
+      maxReviewsPerDay: 50,
+    })).toBe(true);
+
+    const message = formatDailyLimitMessage({
+      ...DEFAULT_SETTINGS,
+      maxNewPerDay: 10,
+      maxReviewsPerDay: 50,
+    }, {
+      reviewDayStartMs: 0,
+      newReviewed: 2,
+      reviewsReviewed: 5,
+    });
+    expect(message).toContain('43 reviews remaining today');
+    expect(message).toContain('8 new cards remaining today');
   });
 });
 
