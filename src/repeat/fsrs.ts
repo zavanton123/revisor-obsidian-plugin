@@ -1,6 +1,5 @@
 import {
   Card,
-  Rating,
   State,
   createEmptyCard,
   fsrs,

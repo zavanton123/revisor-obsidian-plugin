@@ -1,0 +1,100 @@
+name: PR hygiene
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+jobs:
+  size:
+    name: PR size
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Label PR by diff size
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          DIFF_STAT=$(git diff --shortstat "$BASE_SHA...$HEAD_SHA" || true)
+          ADDITIONS=$(echo "$DIFF_STAT" | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo 0)
+          DELETIONS=$(echo "$DIFF_STAT" | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo 0)
+          TOTAL=$((ADDITIONS + DELETIONS))
+          echo "PR diff size: +$ADDITIONS / -$DELETIONS (total $TOTAL)"
+
+          if (( TOTAL <= 50 )); then
+            LABEL="size/XS"
+          elif (( TOTAL <= 200 )); then
+            LABEL="size/S"
+          elif (( TOTAL <= 500 )); then
+            LABEL="size/M"
+          elif (( TOTAL <= 1000 )); then
+            LABEL="size/L"
+          else
+            LABEL="size/XL"
+          fi
+
+          echo "Applying label: $LABEL"
+          for old in size/XS size/S size/M size/L size/XL; do
+            gh api --method DELETE \
+              "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels/${old}" \
+              || true
+          done
+          gh label create "$LABEL" --force --color "ededed" --description "PR size label" || true
+          gh pr edit "${{ github.event.pull_request.number }}" --add-label "$LABEL"
+
+          if (( TOTAL > 1000 )); then
+            echo "::warning::Large PR ($TOTAL changed lines). Consider splitting into smaller PRs."
+          fi
+
+  changelog:
+    name: Changelog reminder
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changelog updates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CHANGED=$(git diff --name-only "$BASE_SHA...$HEAD_SHA" || true)
+
+          if echo "$CHANGED" | grep -Eq '(^|/)(CHANGELOG\.md|README\.md)$'; then
+            echo "Changelog/README updated."
+            exit 0
+          fi
+
+          if echo "$CHANGED" | grep -Eq '\.(ts|tsx|js|css|json)$'; then
+            BODY=$(gh pr view "${{ github.event.pull_request.number }}" --json body -q .body)
+            if echo "$BODY" | grep -Eiq '(##[[:space:]]*(summary|changelog|release notes)|###[[:space:]]*(summary|changelog|release notes))'; then
+              echo "PR description includes release notes."
+              exit 0
+            fi
+            echo "::warning::Code changed without CHANGELOG.md/README.md updates or a Summary/Changelog section in the PR body."
+            gh pr comment "${{ github.event.pull_request.number }}" --body "$(cat <<'EOF'
+### Changelog reminder
+This PR changes code but does not update `CHANGELOG.md` / `README.md`, and the description has no **Summary** / **Changelog** / **Release notes** section.
+
+Please document user-facing changes before merge when relevant.
+EOF
+)" || true
+          else
+            echo "No code changes requiring changelog."
+          fi

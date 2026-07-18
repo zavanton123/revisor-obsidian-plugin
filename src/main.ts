@@ -8,7 +8,6 @@ import {
   Setting,
 } from 'obsidian';
 import { Rating } from 'ts-fsrs';
-import { DateTime } from 'luxon';
 
 import RepeatView, {
   REPEATING_NOTES_DUE_VIEW,
@@ -26,7 +25,6 @@ import { parseRepetition } from './repeat/parsers';
 import { buildQueueMetadata, QueueAction } from './repeat/queueActions';
 import {
   ReviewLog,
-  ReviewRating,
   classifyKind,
   ratingToNumber,
   migrateLegacyActivity,

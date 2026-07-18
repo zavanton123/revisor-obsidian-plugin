@@ -1,5 +1,8 @@
 # Revisor
 
+[![CI](https://github.com/zavanton123/revisor-obsidian-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/zavanton123/revisor-obsidian-plugin/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/zavanton123/revisor-obsidian-plugin/branch/master/graph/badge.svg)](https://codecov.io/gh/zavanton123/revisor-obsidian-plugin)
+
 **Revisor** is an [Obsidian](https://obsidian.md) plugin for reviewing notes with **FSRS spaced repetition** — the same family of algorithm used by Anki. Mark any note for review, rate it when it comes due, and Revisor schedules the next review automatically.
 
 All scheduling state lives in the note's YAML frontmatter, so your vault stays portable and human-readable.

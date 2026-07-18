@@ -11,8 +11,12 @@ concurrency:
 
 jobs:
   test:
-    name: Test & build
+    name: Test & build (${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,30 +24,43 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ matrix.node }}
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Run tests
+        run: npm test
+
+      - name: Build plugin
+        run: npm run build
+
       - name: Run tests with coverage
+        if: matrix.node == 20
         run: npm test -- --coverage --collectCoverageFrom='src/**/*.{ts,tsx}' --collectCoverageFrom='!src/**/*.test.ts' --coverageReporters=text --coverageReporters=lcov
 
-      - name: Upload coverage report
-        if: always()
+      - name: Upload coverage to Codecov
+        if: matrix.node == 20
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage/lcov.info
+          flags: unittests
+          name: revisor
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage artifact
+        if: matrix.node == 20 && always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-lcov
           path: coverage/lcov.info
           if-no-files-found: ignore
 
-      - name: Build plugin
-        run: npm run build
-
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,3 +76,16 @@ jobs:
 
       - name: Run ESLint
         run: npm run lint
+
+  ci:
+    name: CI
+    if: always()
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all jobs to succeed
+        run: |
+          if [[ "${{ needs.test.result }}" != "success" || "${{ needs.lint.result }}" != "success" ]]; then
+            echo "test=${{ needs.test.result }} lint=${{ needs.lint.result }}"
+            exit 1
+          fi

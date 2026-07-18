@@ -48,8 +48,6 @@ export class HeatmapCalendar {
   render() {
     this.svg.empty();
 
-    const { counts, legend } = this.props;
-
     const svgWidth = this.computeGridWidth();
     const svgHeight = CELL_STEP * 7 + HEADER_HEIGHT;
     this.svg.setAttr('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
