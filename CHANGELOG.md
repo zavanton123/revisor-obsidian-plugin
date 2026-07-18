@@ -4,6 +4,8 @@ All notable changes to Revisor are documented in this file.
 
 ## [Unreleased]
 
+- Reset review/drill filters when opening a session (active query is no longer persisted)
+
 ## [0.5.4] - 2026-07-18
 
 - CI: GitHub Actions for tests, build, lint, and tagged releases
