@@ -70,6 +70,11 @@ jobs:
       - name: Check for changelog updates
         env:
           GH_TOKEN: ${{ github.token }}
+          COMMENT_BODY: |
+            ### Changelog reminder
+            This PR changes code but does not update `CHANGELOG.md` / `README.md`, and the description has no **Summary** / **Changelog** / **Release notes** section.
+
+            Please document user-facing changes before merge when relevant.
         run: |
           set -euo pipefail
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
@@ -88,13 +93,7 @@ jobs:
               exit 0
             fi
             echo "::warning::Code changed without CHANGELOG.md/README.md updates or a Summary/Changelog section in the PR body."
-            gh pr comment "${{ github.event.pull_request.number }}" --body "$(cat <<'EOF'
-### Changelog reminder
-This PR changes code but does not update `CHANGELOG.md` / `README.md`, and the description has no **Summary** / **Changelog** / **Release notes** section.
-
-Please document user-facing changes before merge when relevant.
-EOF
-)" || true
+            gh pr comment "${{ github.event.pull_request.number }}" --body "$COMMENT_BODY" || true
           else
             echo "No code changes requiring changelog."
           fi
