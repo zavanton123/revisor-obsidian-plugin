@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Read plugin version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          TAG="${GITHUB_REF_NAME}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "zip_name=revisor-${VERSION}.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Package plugin zip
+        run: |
+          zip -9 "${{ steps.version.outputs.zip_name }}" main.js manifest.json styles.css
+          unzip -l "${{ steps.version.outputs.zip_name }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Revisor ${{ steps.version.outputs.version }}
+          files: ${{ steps.version.outputs.zip_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
